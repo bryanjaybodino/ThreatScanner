@@ -1,6 +1,6 @@
 ﻿namespace ThreatScanner
 {
-    partial class Form1
+    partial class MainForm
     {
         private System.ComponentModel.IContainer components = null;
 
@@ -57,6 +57,9 @@
             this.col_HdrKey = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.col_HdrValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.tabPage_ApiBody = new System.Windows.Forms.TabPage();
+            this.dataGridView_FormData = new System.Windows.Forms.DataGridView();
+            this.col_FormKey = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_FormValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.textBox_Body = new System.Windows.Forms.TextBox();
             this.panel_BodyType = new System.Windows.Forms.Panel();
             this.radioButton_BodyNone = new System.Windows.Forms.RadioButton();
@@ -101,6 +104,7 @@
             this.tabPage_ApiHeaders.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Headers)).BeginInit();
             this.tabPage_ApiBody.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_FormData)).BeginInit();
             this.panel_BodyType.SuspendLayout();
             this.tabPage_ApiAuth.SuspendLayout();
             this.tabPage_ApiWordlist.SuspendLayout();
@@ -472,9 +476,9 @@
             this.button_ApiForce.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_ApiForce.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.button_ApiForce.ForeColor = System.Drawing.Color.White;
-            this.button_ApiForce.Location = new System.Drawing.Point(1082, 34);
+            this.button_ApiForce.Location = new System.Drawing.Point(1078, 26);
             this.button_ApiForce.Name = "button_ApiForce";
-            this.button_ApiForce.Size = new System.Drawing.Size(160, 28);
+            this.button_ApiForce.Size = new System.Drawing.Size(127, 39);
             this.button_ApiForce.TabIndex = 4;
             this.button_ApiForce.Text = "▶  Send";
             this.button_ApiForce.UseVisualStyleBackColor = false;
@@ -609,6 +613,7 @@
             // tabPage_ApiBody
             // 
             this.tabPage_ApiBody.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
+            this.tabPage_ApiBody.Controls.Add(this.dataGridView_FormData);
             this.tabPage_ApiBody.Controls.Add(this.textBox_Body);
             this.tabPage_ApiBody.Controls.Add(this.panel_BodyType);
             this.tabPage_ApiBody.Location = new System.Drawing.Point(4, 29);
@@ -616,6 +621,40 @@
             this.tabPage_ApiBody.Size = new System.Drawing.Size(1240, 189);
             this.tabPage_ApiBody.TabIndex = 2;
             this.tabPage_ApiBody.Text = "  Body";
+            // 
+            // dataGridView_FormData
+            // 
+            this.dataGridView_FormData.BackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
+            this.dataGridView_FormData.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.dataGridView_FormData.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dataGridView_FormData.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.col_FormKey,
+            this.col_FormValue});
+            this.dataGridView_FormData.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dataGridView_FormData.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.dataGridView_FormData.GridColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(232)))), ((int)(((byte)(240)))));
+            this.dataGridView_FormData.Location = new System.Drawing.Point(0, 32);
+            this.dataGridView_FormData.Name = "dataGridView_FormData";
+            this.dataGridView_FormData.RowHeadersVisible = false;
+            this.dataGridView_FormData.RowHeadersWidth = 51;
+            this.dataGridView_FormData.RowTemplate.Height = 26;
+            this.dataGridView_FormData.Size = new System.Drawing.Size(1240, 157);
+            this.dataGridView_FormData.TabIndex = 2;
+            this.dataGridView_FormData.Visible = false;
+            // 
+            // col_FormKey
+            // 
+            this.col_FormKey.HeaderText = "Key";
+            this.col_FormKey.MinimumWidth = 6;
+            this.col_FormKey.Name = "col_FormKey";
+            this.col_FormKey.Width = 320;
+            // 
+            // col_FormValue
+            // 
+            this.col_FormValue.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
+            this.col_FormValue.HeaderText = "Value";
+            this.col_FormValue.MinimumWidth = 6;
+            this.col_FormValue.Name = "col_FormValue";
             // 
             // textBox_Body
             // 
@@ -630,6 +669,7 @@
             this.textBox_Body.ScrollBars = System.Windows.Forms.ScrollBars.Both;
             this.textBox_Body.Size = new System.Drawing.Size(1240, 157);
             this.textBox_Body.TabIndex = 0;
+            this.textBox_Body.Visible = false;
             this.textBox_Body.WordWrap = false;
             // 
             // panel_BodyType
@@ -879,7 +919,7 @@
             this.button_AnalyzeHeaders.ForeColor = System.Drawing.Color.White;
             this.button_AnalyzeHeaders.Location = new System.Drawing.Point(16, 16);
             this.button_AnalyzeHeaders.Name = "button_AnalyzeHeaders";
-            this.button_AnalyzeHeaders.Size = new System.Drawing.Size(180, 44);
+            this.button_AnalyzeHeaders.Size = new System.Drawing.Size(236, 70);
             this.button_AnalyzeHeaders.TabIndex = 0;
             this.button_AnalyzeHeaders.Text = "📋  Dump All Headers";
             this.button_AnalyzeHeaders.UseVisualStyleBackColor = false;
@@ -890,7 +930,7 @@
             this.label_HeaderInfo.AutoSize = true;
             this.label_HeaderInfo.Font = new System.Drawing.Font("Segoe UI", 8.5F);
             this.label_HeaderInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
-            this.label_HeaderInfo.Location = new System.Drawing.Point(210, 26);
+            this.label_HeaderInfo.Location = new System.Drawing.Point(258, 43);
             this.label_HeaderInfo.Name = "label_HeaderInfo";
             this.label_HeaderInfo.Size = new System.Drawing.Size(700, 20);
             this.label_HeaderInfo.TabIndex = 1;
@@ -992,7 +1032,7 @@
             this.webBrowser_Hidden.TabIndex = 3;
             this.webBrowser_Hidden.Visible = false;
             // 
-            // Form1
+            // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -1005,7 +1045,7 @@
             this.Controls.Add(this.webBrowser_Hidden);
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.MinimumSize = new System.Drawing.Size(1100, 680);
-            this.Name = "Form1";
+            this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "ThreatScanner — Web Vulnerability Toolkit";
             this.panel_TopBar.ResumeLayout(false);
@@ -1026,6 +1066,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Headers)).EndInit();
             this.tabPage_ApiBody.ResumeLayout(false);
             this.tabPage_ApiBody.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_FormData)).EndInit();
             this.panel_BodyType.ResumeLayout(false);
             this.panel_BodyType.PerformLayout();
             this.tabPage_ApiAuth.ResumeLayout(false);
@@ -1086,6 +1127,7 @@
         private System.Windows.Forms.TabPage tabPage_ApiHeaders;
         private System.Windows.Forms.DataGridView dataGridView_Headers;
         private System.Windows.Forms.TabPage tabPage_ApiBody;
+        private System.Windows.Forms.DataGridView dataGridView_FormData;  // ← NEW
         private System.Windows.Forms.Panel panel_BodyType;
         private System.Windows.Forms.RadioButton radioButton_BodyNone;
         private System.Windows.Forms.RadioButton radioButton_BodyForm;
@@ -1129,5 +1171,7 @@
         private System.Windows.Forms.DataGridViewCheckBoxColumn col_HdrEnabled;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_HdrKey;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_HdrValue;
+        private System.Windows.Forms.DataGridViewTextBoxColumn col_FormKey;   // ← NEW
+        private System.Windows.Forms.DataGridViewTextBoxColumn col_FormValue; // ← NEW
     }
 }

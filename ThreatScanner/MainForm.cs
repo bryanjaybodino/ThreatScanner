@@ -11,11 +11,11 @@ using System.Windows.Forms;
 
 namespace ThreatScanner
 {
-    public partial class Form1 : Form
+    public partial class MainForm : Form
     {
         private readonly HttpClient _httpClient;
 
-        public Form1()
+        public MainForm()
         {
             InitializeComponent();
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
@@ -24,6 +24,33 @@ namespace ThreatScanner
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreatScanner/1.0");
             _httpClient.Timeout = TimeSpan.FromSeconds(15);
+
+            // ── Wire up body-type radio buttons to toggle input visibility
+            radioButton_BodyNone.CheckedChanged += (s, e) => UpdateBodyInputVisibility();
+            radioButton_BodyForm.CheckedChanged += (s, e) => UpdateBodyInputVisibility();
+            radioButton_BodyJson.CheckedChanged += (s, e) => UpdateBodyInputVisibility();
+            radioButton_BodyRaw.CheckedChanged += (s, e) => UpdateBodyInputVisibility();
+
+            // Set initial state
+            UpdateBodyInputVisibility();
+        }
+
+        // ─── BODY INPUT VISIBILITY ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Shows the correct input control for the selected body type:
+        ///   none  → nothing visible
+        ///   form  → dataGridView_FormData (dynamic key/value rows)
+        ///   JSON  → textBox_Body (code editor)
+        ///   raw   → textBox_Body (plain text)
+        /// </summary>
+        private void UpdateBodyInputVisibility()
+        {
+            bool isNone = radioButton_BodyNone.Checked;
+            bool isForm = radioButton_BodyForm.Checked;
+
+            dataGridView_FormData.Visible = isForm;
+            textBox_Body.Visible = !isForm && !isNone;
         }
 
         // ─── HELPERS ─────────────────────────────────────────────────────────────
@@ -117,13 +144,11 @@ namespace ThreatScanner
 
         private string DetectEventTarget(string html)
         {
-            // Scan ALL __doPostBack calls and pick the best one for login.
-            // Priority: target containing "login" or "submit" — skips ForgotPassword, DTR, OTP, etc.
-            string lower   = html.ToLowerInvariant();
-            string marker  = "__dopostback('";
-            int    search  = 0;
-            string firstTarget  = "";
-            string loginTarget  = "";
+            string lower = html.ToLowerInvariant();
+            string marker = "__dopostback('";
+            int search = 0;
+            string firstTarget = "";
+            string loginTarget = "";
             string submitTarget = "";
 
             while (true)
@@ -132,7 +157,7 @@ namespace ThreatScanner
                 if (pos < 0) break;
 
                 int start = pos + marker.Length;
-                int end   = html.IndexOf("'", start);
+                int end = html.IndexOf("'", start);
                 if (end <= start) break;
 
                 string target = html.Substring(start, end - start);
@@ -142,22 +167,18 @@ namespace ThreatScanner
 
                 string tLow = target.ToLowerInvariant();
 
-                // Highest priority: contains "login"
                 if (tLow.Contains("login") && string.IsNullOrEmpty(loginTarget))
                     loginTarget = target;
 
-                // Second priority: contains "submit"
                 if (tLow.Contains("submit") && string.IsNullOrEmpty(submitTarget))
                     submitTarget = target;
 
                 search = end + 1;
             }
 
-            // Return best match in priority order
-            if (!string.IsNullOrEmpty(loginTarget))  return loginTarget;
+            if (!string.IsNullOrEmpty(loginTarget)) return loginTarget;
             if (!string.IsNullOrEmpty(submitTarget)) return submitTarget;
 
-            // Fallback: type="submit" input/button
             int btnPos = html.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase);
             if (btnPos < 0) btnPos = html.IndexOf("type='submit'", StringComparison.OrdinalIgnoreCase);
             if (btnPos >= 0)
@@ -172,7 +193,6 @@ namespace ThreatScanner
                 }
             }
 
-            // Last resort: first __doPostBack target found
             return firstTarget;
         }
 
@@ -197,20 +217,15 @@ namespace ThreatScanner
         {
             string lower = body.ToLowerInvariant();
 
-            // ── 1. Multiple meaningful cookies = authenticated session (MOST RELIABLE)
-            // A failed login sets 0-1 generic cookies; success sets a full session bundle.
-            // We count cookies that carry real session data (have an expiry and a value).
             if (response.Headers.Contains("Set-Cookie"))
             {
                 var cookies = response.Headers.GetValues("Set-Cookie").ToList();
-                // Count cookies that have an "expires" or "max-age" — generic error pages don't set these
                 int sessionCookieCount = cookies.Count(c =>
                     c.ToLower().Contains("expires=") || c.ToLower().Contains("max-age="));
                 if (sessionCookieCount >= 2)
-                    return true; // 2+ timed cookies = real session bundle, not an error page
+                    return true;
             }
 
-            // ── 2. HTTP redirect away from login page
             if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
             {
                 string location = response.Headers.Location?.ToString() ?? "";
@@ -218,18 +233,15 @@ namespace ThreatScanner
                     return true;
             }
 
-            // ── 3. JS-based redirect (e.g. _direct('Dashboard','Main') or window.location)
             if (lower.Contains("_direct(") ||
                 lower.Contains("window.location") ||
                 lower.Contains("location.href") ||
                 lower.Contains("location.replace"))
             {
-                // Only count as success if it's redirecting away from the login page
                 if (!lower.Contains("login"))
                     return true;
             }
 
-            // ── 4. Common post-login page keywords
             string[] successKeywords = {
                 "dashboard", "logout", "sign out", "signout",
                 "welcome", "my account", "profile", "home page"
@@ -237,7 +249,6 @@ namespace ThreatScanner
             if (successKeywords.Any(k => lower.Contains(k)))
                 return true;
 
-            // ── 5. Login form disappeared from response
             bool stillHasPasswordField =
                 lower.Contains("type=\"password\"") ||
                 lower.Contains("type='password'");
@@ -246,6 +257,7 @@ namespace ThreatScanner
 
             return false;
         }
+
         private bool IsLoginFailure(string body, LoginFramework framework)
         {
             string lower = body.ToLowerInvariant();
@@ -260,9 +272,6 @@ namespace ThreatScanner
                 "invalid login"
             };
 
-            // Use specific multi-word phrases only — avoids false positives from
-            // CSS class names, JS variables, or page content that happen to contain
-            // generic words like "error", "wrong", or "failed".
             return failKeywords.Any(k => lower.Contains(k));
         }
 
@@ -555,19 +564,13 @@ namespace ThreatScanner
 
         // ─── TAB: BRUTE FORCE ────────────────────────────────────────────────────
 
-
-        // --- AUTO-DETECT LOGIN FIELDS ---
-        // Scans <input> tags by type only. No keywords, no name assumptions.
-        // Password field  = first  type="password"  with a name attribute
-        // Username field  = last   type="text/email" seen before the password field
-        // Works regardless of dynamic prefixes (e.g. ASP.NET ctl_XXXX_TextBox_Username)
         private (string userField, string passField) AutoDetectLoginFields(string html)
         {
-            string detectedPass       = "";
+            string detectedPass = "";
             string lastTextBeforePass = "";
 
-            string lower  = html.ToLowerInvariant();
-            int    search = 0;
+            string lower = html.ToLowerInvariant();
+            int search = 0;
 
             while (true)
             {
@@ -577,7 +580,7 @@ namespace ThreatScanner
                 int closePos = lower.IndexOf(">", inputPos);
                 if (closePos < 0) break;
 
-                string tag     = html.Substring(inputPos, closePos - inputPos + 1);
+                string tag = html.Substring(inputPos, closePos - inputPos + 1);
                 string typeVal = ParseAttr(tag, "type").ToLowerInvariant();
                 string nameVal = ParseAttr(tag, "name");
 
@@ -586,11 +589,11 @@ namespace ThreatScanner
                     if (typeVal == "password")
                     {
                         detectedPass = nameVal;
-                        break; // stop — username is whatever we last saw before this
+                        break;
                     }
                     else if (typeVal == "text" || typeVal == "email")
                     {
-                        lastTextBeforePass = nameVal; // keep overwriting — want closest one
+                        lastTextBeforePass = nameVal;
                     }
                 }
 
@@ -645,12 +648,10 @@ namespace ThreatScanner
                     client.DefaultRequestHeaders.Add("User-Agent",
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreatScanner/1.0");
 
-                    // detect framework once
                     var probeResp = await client.GetAsync(url);
                     string probeHtml = await probeResp.Content.ReadAsStringAsync();
                     LoginFramework fw = DetectFramework(probeHtml);
 
-                    // Auto-detect field names from fresh HTML (handles dynamic prefixes)
                     var (usernameField, passwordField) = AutoDetectLoginFields(probeHtml);
                     Invoke((Action)(() =>
                     {
@@ -674,15 +675,14 @@ namespace ThreatScanner
 
                                 string et = DetectEventTarget(html);
 
-                                // Set __EVENTTARGET to the login button — remove first to avoid duplicates
                                 fields.RemoveAll(f =>
-                                    f.Key == "__EVENTTARGET"    ||
-                                    f.Key == "__EVENTARGUMENT"  ||
+                                    f.Key == "__EVENTTARGET" ||
+                                    f.Key == "__EVENTARGUMENT" ||
                                     f.Key == "__SCROLLPOSITIONX" ||
                                     f.Key == "__SCROLLPOSITIONY");
 
-                                fields.Add(new KeyValuePair<string, string>("__EVENTTARGET",     et));
-                                fields.Add(new KeyValuePair<string, string>("__EVENTARGUMENT",   ""));
+                                fields.Add(new KeyValuePair<string, string>("__EVENTTARGET", et));
+                                fields.Add(new KeyValuePair<string, string>("__EVENTARGUMENT", ""));
                                 fields.Add(new KeyValuePair<string, string>("__SCROLLPOSITIONX", "0"));
                                 fields.Add(new KeyValuePair<string, string>("__SCROLLPOSITIONY", "0"));
                                 int vsLen = hidden.ContainsKey("__VIEWSTATE") ? hidden["__VIEWSTATE"].Length : 0;
@@ -697,12 +697,6 @@ namespace ThreatScanner
                                 Invoke((Action)(() => Log("🔄",
                                     $"  PHP/HTML → {hidden.Count} hidden field(s) harvested")));
 
-
-
-
-
-
-                                // detect submit button
                                 string submitName = "";
                                 int btnPos = html.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase);
                                 if (btnPos >= 0)
@@ -720,17 +714,13 @@ namespace ThreatScanner
                                 }
 
                                 if (!string.IsNullOrEmpty(submitName))
-                                {
                                     fields.Add(new KeyValuePair<string, string>(submitName, "SUBMIT"));
-
-                                }
                             }
                             else
                             {
                                 Invoke((Action)(() => Log("🔄", "  Generic → username + password only")));
                             }
 
-                            // Re-detect each iteration — VIEWSTATE prefix changes every GET
                             var (curUser, curPass) = AutoDetectLoginFields(html);
                             if (string.IsNullOrEmpty(curUser)) curUser = usernameField;
                             if (string.IsNullOrEmpty(curPass)) curPass = passwordField;
@@ -745,26 +735,18 @@ namespace ThreatScanner
                             client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", url);
                             if (!client.DefaultRequestHeaders.Contains("X-Requested-With"))
                                 client.DefaultRequestHeaders.Add("X-Requested-With", "XMLHttpRequest");
-
                             if (!client.DefaultRequestHeaders.Contains("Accept"))
                                 client.DefaultRequestHeaders.Add("Accept", "*/*");
-
-
 
                             string postUrl = url;
                             if (fw == LoginFramework.PhpOrHtml)
                             {
                                 string action = ExtractFormAction(html);
-
                                 if (string.IsNullOrEmpty(action))
                                 {
-                                    // 🔥 FIX: detect JS-based login (like your case)
                                     if (html.Contains("login_process.php"))
-                                    {
                                         action = "login_process.php";
-                                    }
                                 }
-
                                 postUrl = BuildPostUrl(url, action);
                             }
 
@@ -779,41 +761,34 @@ namespace ThreatScanner
                             var postResp = await client.PostAsync(postUrl, new FormUrlEncodedContent(fields));
                             string body = await postResp.Content.ReadAsStringAsync();
 
-
-
                             int code = (int)postResp.StatusCode;
                             Uri loginUri = new Uri(url);
                             bool failure = IsLoginFailure(body, fw);
                             bool success = !failure && IsLoginSuccess(body, code, loginUri, postResp, fw);
 
                             string icon, label;
-                            if (success) { icon = "🚨"; label = "SUCCESS — credentials accepted!";
-
-
+                            if (success)
+                            {
+                                icon = "🚨";
+                                label = "SUCCESS — credentials accepted!";
                                 Invoke((Action)(() =>
                                 {
                                     Log(icon, $"  [{pwd}] HTTP {code}  {label}");
                                     HtmlLog("   ", $"  response: {body}");
                                 }));
-
                                 break;
                             }
-                            else  { icon = "🔒"; label = "Failed — wrong credentials";
-
-
-
-
+                            else
+                            {
+                                icon = "🔒";
+                                label = "Failed — wrong credentials";
                                 Invoke((Action)(() =>
                                 {
                                     Log(icon, $"  [{pwd}] HTTP {code}  {label}");
                                 }));
-
                             }
-                            //else { icon = "⚠️"; label = "Uncertain — check snippet below"; }
-
 
                             if (success && !failure) break;
-
                         }
                         catch (Exception ex)
                         {
@@ -835,6 +810,7 @@ namespace ThreatScanner
                 }));
             }
         }
+
         private string ExtractFormAction(string html)
         {
             int formPos = html.IndexOf("<form", StringComparison.OrdinalIgnoreCase);
@@ -858,6 +834,7 @@ namespace ThreatScanner
 
             return "";
         }
+
         private string BuildPostUrl(string baseUrl, string action)
         {
             if (string.IsNullOrEmpty(action))
@@ -866,11 +843,7 @@ namespace ThreatScanner
             try
             {
                 Uri baseUri = new Uri(baseUrl);
-
-                // This automatically handles:
-                // relative, root-relative, absolute URLs
                 Uri fullUri = new Uri(baseUri, action);
-
                 return fullUri.ToString();
             }
             catch
@@ -880,17 +853,6 @@ namespace ThreatScanner
         }
 
         // ─── TAB: API TESTER (Postman-style) ─────────────────────────────────────
-        //
-        //  Reads:
-        //    comboBox_Method          → HTTP verb
-        //    textBox_ApiEndpoint      → URL override (falls back to textBox_Url)
-        //    dataGridView_Params      → query-string params (enabled rows only)
-        //    dataGridView_Headers     → request headers  (enabled rows only)
-        //    tabPage_ApiBody / radio  → body mode (none / form-data / JSON / raw)
-        //    textBox_Body             → raw body text
-        //    comboBox_AuthType        → auth type
-        //    textBox_HeaderKey/Value  → auth header key+value
-        //    tabPage_ApiWordlist opts → wordlist attack options
 
         private async void button_ApiForce_Click(object sender, EventArgs e)
         {
@@ -919,6 +881,9 @@ namespace ThreatScanner
             var queryParams = GetEnabledGridRows(dataGridView_Params, "col_ParamKey", "col_ParamValue");
             var extraHeaders = GetEnabledGridRows(dataGridView_Headers, "col_HdrKey", "col_HdrValue");
 
+            // ── Read form-data grid rows (new dynamic grid)
+            var formDataRows = GetEnabledGridRows(dataGridView_FormData, "col_FormKey", "col_FormValue");
+
             string bodyText = textBox_Body.Text;
             bool bodyIsJson = radioButton_BodyJson.Checked;
             bool bodyIsForm = radioButton_BodyForm.Checked;
@@ -935,7 +900,7 @@ namespace ThreatScanner
             bool useQuery = checkBox_UseQuery.Checked;
             bool forceGet = checkBox_IsGaetMethod.Checked;
             bool jsonPayload = checkBox_Json.Checked;
-            string wlTarget = textBox_ApiWlTarget.Text.Trim(); // e.g. "password={value}"
+            string wlTarget = textBox_ApiWlTarget.Text.Trim();
 
             List<string> wordlist = new List<string> { "" };
             if (useWordlist)
@@ -952,7 +917,7 @@ namespace ThreatScanner
                     {
                         try
                         {
-                            // ── Build query string from Params grid + wordlist injection
+                            // ── Build query string
                             var qParams = new Dictionary<string, string>(queryParams);
                             if (!string.IsNullOrEmpty(wlTarget))
                                 InjectWordlistValue(qParams, wlTarget, wlValue);
@@ -987,7 +952,6 @@ namespace ThreatScanner
 
                                 if (bodyIsJson || jsonPayload)
                                 {
-                                    // Merge bodyParams into the raw JSON text if both present
                                     string json = bodyText;
                                     if (bodyParams.Count > 0 && string.IsNullOrWhiteSpace(json))
                                         json = JsonSerializer.Serialize(bodyParams);
@@ -995,8 +959,8 @@ namespace ThreatScanner
                                 }
                                 else if (bodyIsForm)
                                 {
-                                    // Parse textBox_Body as key=value lines + merge wordlist injection
-                                    var formData = ParseKeyValueLines(bodyText);
+                                    // ── Use the dynamic DataGridView rows (not parsed textbox)
+                                    var formData = new Dictionary<string, string>(formDataRows);
                                     foreach (var kv in bodyParams) formData[kv.Key] = kv.Value;
                                     req.Content = new FormUrlEncodedContent(formData);
                                 }
@@ -1017,10 +981,11 @@ namespace ThreatScanner
                                 string icon = code >= 200 && code < 300 ? "✅"
                                             : code >= 400 && code < 500 ? "⚠️"
                                             : code >= 500 ? "🚨" : "ℹ️";
+
                                 Log(icon, $"HTTP {code}  {resp.ReasonPhrase}" +
                                     (useWordlist ? $"  [val: {wlValue}]" : ""));
 
-                                // Print response headers
+                                // ── Response headers
                                 foreach (var h in resp.Headers)
                                     foreach (var v in h.Value)
                                         Log("→", $"  {h.Key}: {v}");
@@ -1029,8 +994,47 @@ namespace ThreatScanner
                                         Log("→", $"  {h.Key}: {v}");
 
                                 LogSeparator();
-                                // Print response body (truncated)
-                                HtmlLog("📄", body);
+
+                                // ── Response body — multi-line, pretty printed ──────────────
+                                if (string.IsNullOrWhiteSpace(body))
+                                {
+                                    Log("📄", "(empty response body)");
+                                }
+                                else
+                                {
+                                    // Try to pretty-print JSON
+                                    string displayBody = body;
+                                    try
+                                    {
+                                         var doc = JsonDocument.Parse(body);
+                                        displayBody = JsonSerializer.Serialize(
+                                            doc.RootElement,
+                                            new JsonSerializerOptions { WriteIndented = true });
+                                    }
+                                    catch { /* not JSON — display as-is */ }
+
+                                    string[] bodyLines = displayBody
+                                        .Replace("\r\n", "\n")
+                                        .Replace("\r", "\n")
+                                        .Split('\n');
+
+                                    int lineCount = 0;
+                                    foreach (string line in bodyLines)
+                                    {
+                                        if (string.IsNullOrWhiteSpace(line)) continue;
+                                        string trimmed = line.Length > 300
+                                            ? line.Substring(0, 300) + "…"
+                                            : line;
+                                        Log("📄", trimmed);
+                                        if (++lineCount >= 200)
+                                        {
+                                            Log("…", $"(output truncated — {bodyLines.Length} total lines)");
+                                            break;
+                                        }
+                                    }
+                                }
+                                // ───────────────────────────────────────────────────────────
+
                                 LogSeparator();
                             }));
                         }
@@ -1080,7 +1084,6 @@ namespace ThreatScanner
                     req.Headers.TryAddWithoutValidation(headerName, value);
                     break;
                 case "Basic Auth":
-                    // key = username, value = password
                     string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{key}:{value}"));
                     req.Headers.TryAddWithoutValidation("Authorization", "Basic " + encoded);
                     break;
@@ -1111,13 +1114,9 @@ namespace ThreatScanner
             return result;
         }
 
-        /// <summary>
-        /// Injects a wordlist value into params dict.
-        /// wlTarget can be "password={value}" or "password=admin" etc.
-        /// </summary>
+        /// <summary>Injects a wordlist value into params dict.</summary>
         private void InjectWordlistValue(Dictionary<string, string> dict, string template, string wlValue)
         {
-            // Support multiple key=value pairs separated by spaces
             foreach (string part in template.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (!part.Contains("=")) continue;
