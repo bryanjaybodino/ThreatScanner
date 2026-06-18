@@ -182,7 +182,7 @@ namespace ThreatScanner
                                 {
                                     if (string.IsNullOrWhiteSpace(line)) continue;
                                     string trimmed = line.Length > 300 ? line.Substring(0, 300) + "…" : line;
-                                    Log("📄", trimmed);
+                                    Log("", trimmed);
                                     if (++lineCount >= 200)
                                     {
                                         Log("…", $"(output truncated — {lines.Length} total lines)");

@@ -183,7 +183,7 @@ namespace ThreatScanner.Helpers
         private static readonly System.Drawing.Color ColError = System.Drawing.Color.FromArgb(240, 100, 100);
         private static readonly System.Drawing.Color ColInfo = System.Drawing.Color.FromArgb(134, 187, 243);
         private static readonly System.Drawing.Color ColDefault = System.Drawing.Color.FromArgb(212, 212, 212);
-        private static readonly System.Drawing.Color ColSep = System.Drawing.Color.FromArgb(80, 80, 80);
+        private static readonly System.Drawing.Color ColSep = System.Drawing.Color.FromArgb(255, 255, 255);
 
         private static System.Drawing.Color IconToColor(string icon) =>
             icon == "✅" ? ColOk :
