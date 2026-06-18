@@ -38,6 +38,13 @@ namespace ThreatScanner
 
         private CancellationTokenSource _cts;
         private bool _running = false;
+        private bool _fieldsDetected = false;
+
+        // Persistent browser session shared between Detect (Step 2) and Fill (Step 3)
+        // so we never re-navigate and never lose WebForms-generated control IDs.
+        private IPlaywright _playwright;
+        private IBrowser _browser;
+        private IPage _activePage;
 
         // ── Constructor ───────────────────────────────────────────────────────
         public AutoFillForm()
@@ -45,6 +52,17 @@ namespace ThreatScanner
             InitializeComponent();
             textBox_TargetUrl.Text = "http://localhost/ERP/Login";
             ApplyOutputTheme();
+            // Step 3 is locked until Step 2 (Detect) has run
+            button_FillForm.Enabled = false;
+            this.FormClosing += AutoFillForm_FormClosing;
+        }
+
+        private void AutoFillForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Disconnect (but do not close) the CDP-attached Edge — the user's
+            // session/window should keep living outside this tool.
+            try { _browser?.CloseAsync(); } catch { }
+            try { _playwright?.Dispose(); } catch { }
         }
 
         // =========================================================================
@@ -81,6 +99,8 @@ namespace ThreatScanner
                 }
 
                 Log(string.Format("[Detect] Found {0} field(s).", fields.Count), Color.LightGreen);
+                _fieldsDetected = fields.Count > 0;
+                button_FillForm.Enabled = _fieldsDetected;
             }
             catch (Exception ex)
             {
@@ -101,7 +121,6 @@ namespace ThreatScanner
 
             bool dryRun = checkBox_DryRun.Checked;
             int delayMs = (int)numericUpDown_DelayMs.Value;
-            int tabIdx = tabControl_AutoFill.SelectedIndex;
 
             SetRunning(true);
             Log(string.Format("[Fill] Starting {0} on {1} ...", dryRun ? "DRY RUN" : "LIVE RUN", url));
@@ -110,10 +129,7 @@ namespace ThreatScanner
 
             try
             {
-                if (tabIdx == 0)
-                    await FillAutoDetected(url, dryRun, delayMs, _cts.Token);
-                else
-                    await FillManual(url, dryRun, delayMs, _cts.Token);
+                await FillAutoDetected(url, dryRun, delayMs, _cts.Token);
 
                 Log("[Fill] Done.", Color.LightGreen);
             }
@@ -129,20 +145,6 @@ namespace ThreatScanner
             {
                 SetRunning(false);
             }
-        }
-
-        private void button_AddRow_Click(object sender, EventArgs e)
-        {
-            int row = dataGridView_Manual.Rows.Add();
-            dataGridView_Manual.Rows[row].Cells["col_ManEnabled"].Value = true;
-            dataGridView_Manual.Rows[row].Cells["col_ManFieldType"].Value = "text";
-            dataGridView_Manual.Rows[row].Cells["col_ManSelectorType"].Value = "Name";
-        }
-
-        private void button_RemoveRow_Click(object sender, EventArgs e)
-        {
-            foreach (DataGridViewRow row in dataGridView_Manual.SelectedRows)
-                if (!row.IsNewRow) dataGridView_Manual.Rows.Remove(row);
         }
 
         private void button_SaveReport_Click(object sender, EventArgs e)
@@ -167,18 +169,16 @@ namespace ThreatScanner
         // =========================================================================
         //  CORE LOGIC — DETECT
         // =========================================================================
+
         private async Task<List<FieldInfo>> DetectFieldsAsync(string url, bool headless)
         {
+            if (headless)
+                Log("[Detect] Note: this tool now attaches to your real Edge session via CDP, so the page will be visible regardless of 'Run headless'. Log in there first if needed.", Color.Yellow);
+
             List<FieldInfo> results = new List<FieldInfo>();
 
-            IPlaywright playwright = await Playwright.CreateAsync();
-            IBrowser browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-            {
-                Headless = headless,
-                ExecutablePath = GetEdgePath()
-            });
+            IPage page = await GetOrCreateActivePageAsync();
 
-            IPage page = await browser.NewPageAsync();
             Log("[Detect] Navigating ...");
             await page.GotoAsync(url, new PageGotoOptions
             {
@@ -186,6 +186,15 @@ namespace ThreatScanner
                 Timeout = 60000
             });
             await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = 30000 });
+
+            // If the URL we're scanning bounced to a login page, warn loudly —
+            // detecting fields on a login redirect produces selectors that won't
+            // exist once the real (post-login) page is shown.
+            if (page.Url.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                url.IndexOf("Login", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                Log(string.Format("[Detect] WARNING: requested {0} but landed on {1} — log in first, then re-run Detect.", url, page.Url), Color.OrangeRed);
+            }
 
             foreach (IFrame frame in page.Frames)
             {
@@ -239,14 +248,15 @@ namespace ThreatScanner
                 {
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
+                    string id = await el.GetAttributeAsync("id") ?? "";
                     results.Add(new FieldInfo
                     {
                         Tag = "input",
                         Name = name,
-                        Id = "",
+                        Id = id,
                         Type = "checkbox",
                         Label = "",
-                        Selector = string.Format("input[name='{0}'][type='checkbox']", name),
+                        Selector = BuildSelector(name, id),
                         SuggestedValue = "true"
                     });
                 }
@@ -255,34 +265,42 @@ namespace ThreatScanner
                 {
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
+                    string id = await el.GetAttributeAsync("id") ?? "";
                     results.Add(new FieldInfo
                     {
                         Tag = "input",
                         Name = name,
-                        Id = "",
+                        Id = id,
                         Type = "radio",
                         Label = "",
-                        Selector = string.Format("input[name='{0}'][type='radio']", name),
+                        Selector = BuildSelector(name, id),
                         SuggestedValue = "(first)"
                     });
                 }
             }
 
-            await browser.CloseAsync();
-            playwright.Dispose();
+            // NOTE: we deliberately do NOT close the browser/page here.
+            // Step 3 (Fill) reuses this exact same page so the selectors
+            // captured above stay valid (WebForms regenerates control IDs
+            // on every fresh render, so a second navigation would break them).
             return results;
         }
 
-        // =========================================================================
-        //  CORE LOGIC — FILL (AUTO DETECT tab)
-        // =========================================================================
-        private async Task FillAutoDetected(string url, bool dryRun, int delayMs, CancellationToken ct)
+        /// <summary>
+        /// Returns the live page Detect/Fill should both operate on. Connects to the
+        /// already-running Edge (via CDP) on first use and reuses the same page for
+        /// every subsequent call within this form's lifetime.
+        /// </summary>
+        private async Task<IPage> GetOrCreateActivePageAsync()
         {
+            if (_activePage != null && !_activePage.IsClosed)
+                return _activePage;
+
             await EnsureEdgeRunningAsync();
 
-            IPlaywright playwright = await Playwright.CreateAsync();
-            IBrowser browser = await playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
-            IBrowserContext context = browser.Contexts[0];
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
+            IBrowserContext context = _browser.Contexts[0];
 
             IPage page = null;
             foreach (IPage p in context.Pages)
@@ -296,114 +314,166 @@ namespace ThreatScanner
             if (page == null)
                 page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
 
-            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 60000 });
-            await page.WaitForLoadStateAsync(LoadState.Load);
-            await Task.Delay(2000);
+            _activePage = page;
+            return _activePage;
+        }
 
-            if (dryRun)
+        // =========================================================================
+        //  CORE LOGIC — FILL (AUTO DETECT tab)
+        // =========================================================================
+        private async Task FillAutoDetected(string url, bool dryRun, int delayMs, CancellationToken ct)
+        {
+            // Build the list of fields the user left checked in the grid
+            List<FieldInfo> selectedFields = new List<FieldInfo>();
+            foreach (DataGridViewRow row in dataGridView_Detected.Rows)
             {
-                foreach (DataGridViewRow row in dataGridView_Detected.Rows)
+                bool enabled = row.Cells["col_DetEnabled"].Value is true;
+                if (!enabled) continue;
+                selectedFields.Add(new FieldInfo
                 {
-                    bool enabled = row.Cells["col_DetEnabled"].Value is true;
-                    if (!enabled) continue;
-                    string sel = row.Cells["col_DetSelector"].Value != null ? row.Cells["col_DetSelector"].Value.ToString() : "";
-                    string val = row.Cells["col_DetValue"].Value != null ? row.Cells["col_DetValue"].Value.ToString() : "";
-                    if (!string.IsNullOrEmpty(sel))
-                        Log(string.Format("  [DRY] Would fill [{0}] -> \"{1}\"", sel, val), Color.Cyan);
-                }
+                    Tag = row.Cells["col_DetTag"].Value?.ToString() ?? "",
+                    Name = row.Cells["col_DetName"].Value?.ToString() ?? "",
+                    Id = row.Cells["col_DetId"].Value?.ToString() ?? "",
+                    Type = row.Cells["col_DetType"].Value?.ToString() ?? "",
+                    Label = row.Cells["col_DetLabel"].Value?.ToString() ?? "",
+                    Selector = row.Cells["col_DetSelector"].Value?.ToString() ?? "",
+                    SuggestedValue = row.Cells["col_DetValue"].Value?.ToString() ?? ""
+                });
+            }
+
+            if (selectedFields.Count == 0)
+            {
+                Log("[Fill] No fields selected — tick at least one checkbox in the grid.", Color.OrangeRed);
                 return;
             }
 
+            // Dry run: just echo what would happen, no browser needed
+            if (dryRun)
+            {
+                foreach (FieldInfo f in selectedFields)
+                    Log(string.Format("  [DRY] Would fill [{0}] -> \"{1}\"", f.Selector, f.SuggestedValue), Color.Cyan);
+                return;
+            }
+
+            // Live run: reuse the SAME page Detect already opened — do NOT navigate.
+            // Re-navigating an ASP.NET WebForms page regenerates ctl_XXXXX IDs and/or
+            // can bounce through a login redirect, which is exactly what broke fill.
+            if (_activePage == null || _activePage.IsClosed)
+            {
+                Log("[Fill] No active page from Detect found. Run 'Detect Fields' first, then Start Fill.", Color.OrangeRed);
+                return;
+            }
+
+            IPage page = _activePage;
+            Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)", page.Url, page.Frames.Count, selectedFields.Count));
+
+            HashSet<FieldInfo> handled = new HashSet<FieldInfo>();
             foreach (IFrame frame in page.Frames)
-                await FillFrameDynamic(frame, page, delayMs, ct);
+                await FillFrameFromGrid(frame, page, selectedFields, handled, delayMs, ct);
+
+            int missed = selectedFields.Count - handled.Count;
+            if (missed > 0)
+                Log(string.Format("[Fill] {0} selected field(s) were not found on the page (the DOM may have changed since Detect ran — re-run Detect).", missed), Color.OrangeRed);
         }
 
+
         // =========================================================================
-        //  CORE LOGIC — FILL (MANUAL tab)
+        //  GRID-DRIVEN FRAME FILLER  (respects checkbox selection from Step 2)
         // =========================================================================
-        private async Task FillManual(string url, bool dryRun, int delayMs, CancellationToken ct)
+        private async Task FillFrameFromGrid(IFrame frame, IPage page, List<FieldInfo> selectedFields, HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
         {
-            await EnsureEdgeRunningAsync();
-
-            IPlaywright playwright = await Playwright.CreateAsync();
-            IBrowser browser = await playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
-            IBrowserContext context = browser.Contexts[0];
-            IPage page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
-
-            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 60000 });
-            await page.WaitForLoadStateAsync(LoadState.Load);
-            await Task.Delay(1500);
-
-            foreach (DataGridViewRow row in dataGridView_Manual.Rows)
+            foreach (FieldInfo f in selectedFields)
             {
                 ct.ThrowIfCancellationRequested();
-                bool enabled = row.Cells["col_ManEnabled"].Value is true;
-                if (!enabled) continue;
+                if (handled.Contains(f)) continue;
+                if (string.IsNullOrEmpty(f.Selector)) continue;
 
-                string fieldType = row.Cells["col_ManFieldType"].Value != null ? row.Cells["col_ManFieldType"].Value.ToString() : "text";
-                string selType = row.Cells["col_ManSelectorType"].Value != null ? row.Cells["col_ManSelectorType"].Value.ToString() : "Name";
-                string selValue = row.Cells["col_ManSelectorValue"].Value != null ? row.Cells["col_ManSelectorValue"].Value.ToString() : "";
-                string value = row.Cells["col_ManValue"].Value != null ? row.Cells["col_ManValue"].Value.ToString() : "";
-
-                if (string.IsNullOrEmpty(selValue)) continue;
-
-                string cssSelector;
-                switch (selType)
-                {
-                    case "Id": cssSelector = "#" + selValue; break;
-                    case "CSS Selector": cssSelector = selValue; break;
-                    case "XPath": cssSelector = selValue; break;
-                    default: cssSelector = "[name='" + selValue + "']"; break;
-                }
-
-                if (dryRun)
-                {
-                    Log(string.Format("  [DRY] [{0}] {1} -> \"{2}\"", fieldType, cssSelector, value), Color.Cyan);
-                    continue;
-                }
-
+                IElementHandle el;
                 try
                 {
-                    ILocator loc = selType == "XPath"
-                        ? page.Locator("xpath=" + cssSelector)
-                        : page.Locator(cssSelector);
-
-                    await loc.ScrollIntoViewIfNeededAsync();
-                    await Task.Delay(delayMs);
-
-                    switch (fieldType)
-                    {
-                        case "select":
-                            await loc.SelectOptionAsync(value);
-                            break;
-                        case "checkbox":
-                            bool chk = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-                            if (chk) await loc.CheckAsync(); else await loc.UncheckAsync();
-                            break;
-                        case "radio":
-                            await loc.CheckAsync();
-                            break;
-                        default:
-                            await loc.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
-                            await page.Keyboard.PressAsync("Delete");
-                            foreach (char c in value)
-                            {
-                                await page.Keyboard.TypeAsync(c.ToString());
-                                await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
-                            }
-                            await page.Keyboard.PressAsync("Tab");
-                            break;
-                    }
-
-                    Log(string.Format("  FILL [{0}] {1} -> \"{2}\"", fieldType, Truncate(cssSelector, 40), value));
-                    await Task.Delay(delayMs);
+                    el = await frame.QuerySelectorAsync(f.Selector);
                 }
                 catch (Exception ex)
                 {
-                    Log(string.Format("  ERROR {0}: {1}", cssSelector, ex.Message), Color.OrangeRed);
+                    Log(string.Format("  SKIP   [{0}] invalid selector: {1}", f.Selector, ex.Message), Color.OrangeRed);
+                    continue;
                 }
+
+                if (el == null) continue; // not in this frame — try the next one
+
+                bool visible = await el.IsVisibleAsync();
+                bool enabled = await el.IsEnabledAsync();
+                if (!visible || !enabled)
+                {
+                    Log(string.Format("  SKIP   [{0}] visible={1} enabled={2}", f.Selector, visible, enabled), Color.OrangeRed);
+                    handled.Add(f); // found it, just can't act on it — don't recount as "missing"
+                    continue;
+                }
+
+                await el.ScrollIntoViewIfNeededAsync();
+                await Task.Delay(Rng.Next(150, 300));
+
+                string type = f.Type.ToLowerInvariant();
+
+                if (type == "checkbox")
+                {
+                    if (!await el.IsCheckedAsync()) await el.CheckAsync();
+                    Log(string.Format("  CHECK  [{0}]", f.Selector));
+                    handled.Add(f);
+                }
+                else if (type == "radio")
+                {
+                    await el.CheckAsync();
+                    Log(string.Format("  RADIO  [{0}]", f.Selector));
+                    handled.Add(f);
+                }
+                else if (type == "select")
+                {
+                    // pick first valid option if value is the placeholder text
+                    string val = f.SuggestedValue;
+                    if (string.IsNullOrEmpty(val) || val == "(first valid option)")
+                    {
+                        IReadOnlyList<IElementHandle> opts = await el.QuerySelectorAllAsync("option");
+                        foreach (IElementHandle opt in opts)
+                        {
+                            string v = await opt.GetAttributeAsync("value") ?? "";
+                            if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1") { val = v; break; }
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(val))
+                    {
+                        await el.SelectOptionAsync(val);
+                        Log(string.Format("  SELECT [{0}] -> \"{1}\"", f.Selector, val));
+                    }
+                    handled.Add(f);
+                }
+                else
+                {
+                    // text / email / password / date / number / textarea …
+                    string value = f.SuggestedValue;
+                    if (string.IsNullOrEmpty(value))
+                    {
+                        handled.Add(f);
+                        continue;
+                    }
+
+                    await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
+                    await Task.Delay(60);
+                    await page.Keyboard.PressAsync("Delete");
+                    foreach (char c in value)
+                    {
+                        await page.Keyboard.TypeAsync(c.ToString());
+                        await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
+                    }
+                    await page.Keyboard.PressAsync("Tab");
+                    Log(string.Format("  FILL   [{0}] -> \"{1}\"", f.Selector, value));
+                    handled.Add(f);
+                }
+
+                await Task.Delay(delayMs);
             }
         }
+
 
         // =========================================================================
         //  DYNAMIC FRAME FILLER
@@ -630,7 +700,6 @@ namespace ThreatScanner
             return null;
         }
 
-        // Uses string[] { value, text } instead of ValueTuple (not available in .NET 4.8 without extra package)
         private static string InferSelectValue(string hint, List<string[]> options)
         {
             if (hint.Contains("gender") || hint.Contains("sex"))
@@ -664,9 +733,10 @@ namespace ThreatScanner
         {
             _running = running;
             progressBar_Scan.Style = running ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
-            button_FillForm.Enabled = !running;
             button_DetectFields.Enabled = !running;
-            button_FillForm.Text = running ? "Running..." : "Fill Form";
+            // Fill (Step 3) only enabled when not running AND fields have been detected
+            button_FillForm.Enabled = !running && _fieldsDetected;
+            button_FillForm.Text = running ? "Running..." : "▶  Start Fill";
         }
 
         private void Log(string message, Color? color = null)
