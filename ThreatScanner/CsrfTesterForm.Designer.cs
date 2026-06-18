@@ -47,6 +47,9 @@
             this.col_CsrfHdrValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.button_ForgeRequest = new System.Windows.Forms.Button();
             this.button_GeneratePoc = new System.Windows.Forms.Button();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.panel2 = new System.Windows.Forms.Panel();
+            this.panel3 = new System.Windows.Forms.Panel();
             this.panel_TopBar.SuspendLayout();
             this.panel_Main.SuspendLayout();
             this.panel_Output.SuspendLayout();
@@ -54,6 +57,9 @@
             this.tabPage_Scan.SuspendLayout();
             this.tabPage_Forge.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Headers)).BeginInit();
+            this.panel1.SuspendLayout();
+            this.panel2.SuspendLayout();
+            this.panel3.SuspendLayout();
             this.SuspendLayout();
             // 
             // panel_TopBar
@@ -248,20 +254,9 @@
             // tabPage_Forge
             // 
             this.tabPage_Forge.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
-            this.tabPage_Forge.Controls.Add(this.label_ForgeUrl);
-            this.tabPage_Forge.Controls.Add(this.textBox_ForgeUrl);
-            this.tabPage_Forge.Controls.Add(this.button_AutoFill);
-            this.tabPage_Forge.Controls.Add(this.label_Method);
-            this.tabPage_Forge.Controls.Add(this.comboBox_Method);
-            this.tabPage_Forge.Controls.Add(this.label_ForgeOrigin);
-            this.tabPage_Forge.Controls.Add(this.textBox_ForgeOrigin);
-            this.tabPage_Forge.Controls.Add(this.label_ForgeBody);
-            this.tabPage_Forge.Controls.Add(this.textBox_ForgeBody);
-            this.tabPage_Forge.Controls.Add(this.checkBox_OmitToken);
-            this.tabPage_Forge.Controls.Add(this.label_CustomHeaders);
-            this.tabPage_Forge.Controls.Add(this.dataGridView_Headers);
-            this.tabPage_Forge.Controls.Add(this.button_ForgeRequest);
-            this.tabPage_Forge.Controls.Add(this.button_GeneratePoc);
+            this.tabPage_Forge.Controls.Add(this.panel3);
+            this.tabPage_Forge.Controls.Add(this.panel1);
+            this.tabPage_Forge.Controls.Add(this.panel2);
             this.tabPage_Forge.Location = new System.Drawing.Point(4, 30);
             this.tabPage_Forge.Name = "tabPage_Forge";
             this.tabPage_Forge.Padding = new System.Windows.Forms.Padding(10);
@@ -274,7 +269,7 @@
             this.label_ForgeUrl.AutoSize = true;
             this.label_ForgeUrl.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.label_ForgeUrl.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            this.label_ForgeUrl.Location = new System.Drawing.Point(14, 14);
+            this.label_ForgeUrl.Location = new System.Drawing.Point(4, 6);
             this.label_ForgeUrl.Name = "label_ForgeUrl";
             this.label_ForgeUrl.Size = new System.Drawing.Size(105, 20);
             this.label_ForgeUrl.TabIndex = 0;
@@ -284,7 +279,7 @@
             // 
             this.textBox_ForgeUrl.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.textBox_ForgeUrl.Font = new System.Drawing.Font("Consolas", 10F);
-            this.textBox_ForgeUrl.Location = new System.Drawing.Point(14, 34);
+            this.textBox_ForgeUrl.Location = new System.Drawing.Point(4, 26);
             this.textBox_ForgeUrl.Name = "textBox_ForgeUrl";
             this.textBox_ForgeUrl.Size = new System.Drawing.Size(500, 27);
             this.textBox_ForgeUrl.TabIndex = 1;
@@ -296,7 +291,7 @@
             this.button_AutoFill.FlatAppearance.BorderSize = 0;
             this.button_AutoFill.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.button_AutoFill.ForeColor = System.Drawing.Color.DimGray;
-            this.button_AutoFill.Location = new System.Drawing.Point(14, 66);
+            this.button_AutoFill.Location = new System.Drawing.Point(4, 58);
             this.button_AutoFill.Name = "button_AutoFill";
             this.button_AutoFill.Size = new System.Drawing.Size(500, 28);
             this.button_AutoFill.TabIndex = 2;
@@ -309,7 +304,7 @@
             this.label_Method.AutoSize = true;
             this.label_Method.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.label_Method.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            this.label_Method.Location = new System.Drawing.Point(14, 104);
+            this.label_Method.Location = new System.Drawing.Point(4, 96);
             this.label_Method.Name = "label_Method";
             this.label_Method.Size = new System.Drawing.Size(64, 20);
             this.label_Method.TabIndex = 3;
@@ -325,7 +320,7 @@
             "PUT",
             "PATCH",
             "DELETE"});
-            this.comboBox_Method.Location = new System.Drawing.Point(14, 124);
+            this.comboBox_Method.Location = new System.Drawing.Point(4, 116);
             this.comboBox_Method.Name = "comboBox_Method";
             this.comboBox_Method.Size = new System.Drawing.Size(120, 29);
             this.comboBox_Method.TabIndex = 4;
@@ -335,7 +330,7 @@
             this.label_ForgeOrigin.AutoSize = true;
             this.label_ForgeOrigin.Font = new System.Drawing.Font("Segoe UI", 7.2F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label_ForgeOrigin.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            this.label_ForgeOrigin.Location = new System.Drawing.Point(150, 104);
+            this.label_ForgeOrigin.Location = new System.Drawing.Point(140, 96);
             this.label_ForgeOrigin.Name = "label_ForgeOrigin";
             this.label_ForgeOrigin.Size = new System.Drawing.Size(228, 15);
             this.label_ForgeOrigin.TabIndex = 5;
@@ -345,7 +340,7 @@
             // 
             this.textBox_ForgeOrigin.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.textBox_ForgeOrigin.Font = new System.Drawing.Font("Consolas", 9.5F);
-            this.textBox_ForgeOrigin.Location = new System.Drawing.Point(150, 124);
+            this.textBox_ForgeOrigin.Location = new System.Drawing.Point(140, 116);
             this.textBox_ForgeOrigin.Name = "textBox_ForgeOrigin";
             this.textBox_ForgeOrigin.Size = new System.Drawing.Size(364, 26);
             this.textBox_ForgeOrigin.TabIndex = 6;
@@ -354,9 +349,10 @@
             // label_ForgeBody
             // 
             this.label_ForgeBody.AutoSize = true;
+            this.label_ForgeBody.Dock = System.Windows.Forms.DockStyle.Top;
             this.label_ForgeBody.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.label_ForgeBody.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            this.label_ForgeBody.Location = new System.Drawing.Point(14, 162);
+            this.label_ForgeBody.Location = new System.Drawing.Point(0, 0);
             this.label_ForgeBody.Name = "label_ForgeBody";
             this.label_ForgeBody.Size = new System.Drawing.Size(386, 20);
             this.label_ForgeBody.TabIndex = 7;
@@ -366,12 +362,13 @@
             // 
             this.textBox_ForgeBody.AcceptsReturn = true;
             this.textBox_ForgeBody.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.textBox_ForgeBody.Dock = System.Windows.Forms.DockStyle.Fill;
             this.textBox_ForgeBody.Font = new System.Drawing.Font("Consolas", 9.5F);
-            this.textBox_ForgeBody.Location = new System.Drawing.Point(14, 182);
+            this.textBox_ForgeBody.Location = new System.Drawing.Point(0, 20);
             this.textBox_ForgeBody.Multiline = true;
             this.textBox_ForgeBody.Name = "textBox_ForgeBody";
             this.textBox_ForgeBody.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox_ForgeBody.Size = new System.Drawing.Size(500, 170);
+            this.textBox_ForgeBody.Size = new System.Drawing.Size(507, 160);
             this.textBox_ForgeBody.TabIndex = 8;
             // 
             // checkBox_OmitToken
@@ -379,11 +376,12 @@
             this.checkBox_OmitToken.AutoSize = true;
             this.checkBox_OmitToken.Checked = true;
             this.checkBox_OmitToken.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBox_OmitToken.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.checkBox_OmitToken.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.checkBox_OmitToken.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(38)))), ((int)(((byte)(38)))));
-            this.checkBox_OmitToken.Location = new System.Drawing.Point(14, 358);
+            this.checkBox_OmitToken.Location = new System.Drawing.Point(0, 180);
             this.checkBox_OmitToken.Name = "checkBox_OmitToken";
-            this.checkBox_OmitToken.Size = new System.Drawing.Size(380, 24);
+            this.checkBox_OmitToken.Size = new System.Drawing.Size(507, 24);
             this.checkBox_OmitToken.TabIndex = 9;
             this.checkBox_OmitToken.Text = "Omit CSRF token (simulate forged cross-site request)";
             // 
@@ -392,7 +390,7 @@
             this.label_CustomHeaders.AutoSize = true;
             this.label_CustomHeaders.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.label_CustomHeaders.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            this.label_CustomHeaders.Location = new System.Drawing.Point(14, 390);
+            this.label_CustomHeaders.Location = new System.Drawing.Point(4, 12);
             this.label_CustomHeaders.Name = "label_CustomHeaders";
             this.label_CustomHeaders.Size = new System.Drawing.Size(184, 20);
             this.label_CustomHeaders.TabIndex = 10;
@@ -405,7 +403,7 @@
             this.dataGridView_Headers.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.col_CsrfHdrKey,
             this.col_CsrfHdrValue});
-            this.dataGridView_Headers.Location = new System.Drawing.Point(14, 410);
+            this.dataGridView_Headers.Location = new System.Drawing.Point(4, 32);
             this.dataGridView_Headers.Name = "dataGridView_Headers";
             this.dataGridView_Headers.RowHeadersWidth = 24;
             this.dataGridView_Headers.Size = new System.Drawing.Size(500, 92);
@@ -433,7 +431,7 @@
             this.button_ForgeRequest.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_ForgeRequest.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.button_ForgeRequest.ForeColor = System.Drawing.Color.White;
-            this.button_ForgeRequest.Location = new System.Drawing.Point(14, 516);
+            this.button_ForgeRequest.Location = new System.Drawing.Point(4, 138);
             this.button_ForgeRequest.Name = "button_ForgeRequest";
             this.button_ForgeRequest.Size = new System.Drawing.Size(245, 38);
             this.button_ForgeRequest.TabIndex = 12;
@@ -449,13 +447,51 @@
             this.button_GeneratePoc.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_GeneratePoc.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.button_GeneratePoc.ForeColor = System.Drawing.Color.White;
-            this.button_GeneratePoc.Location = new System.Drawing.Point(277, 516);
+            this.button_GeneratePoc.Location = new System.Drawing.Point(267, 138);
             this.button_GeneratePoc.Name = "button_GeneratePoc";
             this.button_GeneratePoc.Size = new System.Drawing.Size(237, 38);
             this.button_GeneratePoc.TabIndex = 13;
             this.button_GeneratePoc.Text = "📄  Generate PoC HTML";
             this.button_GeneratePoc.UseVisualStyleBackColor = false;
             this.button_GeneratePoc.Click += new System.EventHandler(this.button_GeneratePoc_Click);
+            // 
+            // panel1
+            // 
+            this.panel1.Controls.Add(this.label_ForgeUrl);
+            this.panel1.Controls.Add(this.textBox_ForgeUrl);
+            this.panel1.Controls.Add(this.textBox_ForgeOrigin);
+            this.panel1.Controls.Add(this.button_AutoFill);
+            this.panel1.Controls.Add(this.label_ForgeOrigin);
+            this.panel1.Controls.Add(this.label_Method);
+            this.panel1.Controls.Add(this.comboBox_Method);
+            this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panel1.Location = new System.Drawing.Point(10, 10);
+            this.panel1.Name = "panel1";
+            this.panel1.Size = new System.Drawing.Size(507, 149);
+            this.panel1.TabIndex = 2;
+            // 
+            // panel2
+            // 
+            this.panel2.Controls.Add(this.label_CustomHeaders);
+            this.panel2.Controls.Add(this.button_GeneratePoc);
+            this.panel2.Controls.Add(this.button_ForgeRequest);
+            this.panel2.Controls.Add(this.dataGridView_Headers);
+            this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.panel2.Location = new System.Drawing.Point(10, 363);
+            this.panel2.Name = "panel2";
+            this.panel2.Size = new System.Drawing.Size(507, 191);
+            this.panel2.TabIndex = 2;
+            // 
+            // panel3
+            // 
+            this.panel3.Controls.Add(this.textBox_ForgeBody);
+            this.panel3.Controls.Add(this.label_ForgeBody);
+            this.panel3.Controls.Add(this.checkBox_OmitToken);
+            this.panel3.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panel3.Location = new System.Drawing.Point(10, 159);
+            this.panel3.Name = "panel3";
+            this.panel3.Size = new System.Drawing.Size(507, 204);
+            this.panel3.TabIndex = 2;
             // 
             // CsrfTesterForm
             // 
@@ -478,8 +514,13 @@
             this.tabPage_Scan.ResumeLayout(false);
             this.tabPage_Scan.PerformLayout();
             this.tabPage_Forge.ResumeLayout(false);
-            this.tabPage_Forge.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Headers)).EndInit();
+            this.panel1.ResumeLayout(false);
+            this.panel1.PerformLayout();
+            this.panel2.ResumeLayout(false);
+            this.panel2.PerformLayout();
+            this.panel3.ResumeLayout(false);
+            this.panel3.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -519,5 +560,8 @@
         private System.Windows.Forms.Button button_ClearOutput;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_CsrfHdrKey;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_CsrfHdrValue;
+        private System.Windows.Forms.Panel panel2;
+        private System.Windows.Forms.Panel panel1;
+        private System.Windows.Forms.Panel panel3;
     }
 }
