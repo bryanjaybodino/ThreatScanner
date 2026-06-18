@@ -19,39 +19,52 @@
             this.label_Subtitle = new System.Windows.Forms.Label();
             this.panel_Cards = new System.Windows.Forms.Panel();
             this.button_OpenScanner = new System.Windows.Forms.Button();
-            this.button_OpenBruteForce = new System.Windows.Forms.Button();
-            this.button_OpenApiTester = new System.Windows.Forms.Button();
             this.label_ScannerDesc = new System.Windows.Forms.Label();
+            this.button_OpenBruteForce = new System.Windows.Forms.Button();
             this.label_BruteDesc = new System.Windows.Forms.Label();
+            this.button_OpenApiTester = new System.Windows.Forms.Button();
             this.label_ApiDesc = new System.Windows.Forms.Label();
             this.label_Disclaimer = new System.Windows.Forms.Label();
-
             this.panel_TopBar.SuspendLayout();
             this.panel_Cards.SuspendLayout();
             this.SuspendLayout();
-
-            // ── panel_TopBar ────────────────────────────────────────────────────
-            this.panel_TopBar.BackColor = System.Drawing.Color.FromArgb(15, 23, 42);
-            this.panel_TopBar.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panel_TopBar.Height = 80;
+            // 
+            // panel_TopBar
+            // 
+            this.panel_TopBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
             this.panel_TopBar.Controls.Add(this.label_Title);
             this.panel_TopBar.Controls.Add(this.label_Subtitle);
-
+            this.panel_TopBar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panel_TopBar.Location = new System.Drawing.Point(0, 0);
+            this.panel_TopBar.Name = "panel_TopBar";
+            this.panel_TopBar.Size = new System.Drawing.Size(1100, 80);
+            this.panel_TopBar.TabIndex = 1;
+            // 
+            // label_Title
+            // 
             this.label_Title.AutoSize = true;
             this.label_Title.Font = new System.Drawing.Font("Segoe UI", 16F, System.Drawing.FontStyle.Bold);
             this.label_Title.ForeColor = System.Drawing.Color.White;
             this.label_Title.Location = new System.Drawing.Point(20, 10);
+            this.label_Title.Name = "label_Title";
+            this.label_Title.Size = new System.Drawing.Size(247, 37);
+            this.label_Title.TabIndex = 0;
             this.label_Title.Text = "⚡ ThreatScanner";
-
+            // 
+            // label_Subtitle
+            // 
             this.label_Subtitle.AutoSize = true;
             this.label_Subtitle.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.label_Subtitle.ForeColor = System.Drawing.Color.FromArgb(148, 163, 184);
+            this.label_Subtitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
             this.label_Subtitle.Location = new System.Drawing.Point(22, 48);
+            this.label_Subtitle.Name = "label_Subtitle";
+            this.label_Subtitle.Size = new System.Drawing.Size(425, 20);
+            this.label_Subtitle.TabIndex = 1;
             this.label_Subtitle.Text = "Web Vulnerability Testing Toolkit  •  For authorized testing only";
-
-            // ── panel_Cards ─────────────────────────────────────────────────────
-            this.panel_Cards.BackColor = System.Drawing.Color.FromArgb(248, 249, 250);
-            this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
+            // 
+            // panel_Cards
+            // 
+            this.panel_Cards.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
             this.panel_Cards.Controls.Add(this.button_OpenScanner);
             this.panel_Cards.Controls.Add(this.label_ScannerDesc);
             this.panel_Cards.Controls.Add(this.button_OpenBruteForce);
@@ -59,81 +72,111 @@
             this.panel_Cards.Controls.Add(this.button_OpenApiTester);
             this.panel_Cards.Controls.Add(this.label_ApiDesc);
             this.panel_Cards.Controls.Add(this.label_Disclaimer);
-
-            // ── Card 1 · Full Scanner ───────────────────────────────────────────
-            this.button_OpenScanner.BackColor = System.Drawing.Color.FromArgb(37, 99, 235);
-            this.button_OpenScanner.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panel_Cards.Location = new System.Drawing.Point(0, 80);
+            this.panel_Cards.Name = "panel_Cards";
+            this.panel_Cards.Size = new System.Drawing.Size(1100, 263);
+            this.panel_Cards.TabIndex = 0;
+            // 
+            // button_OpenScanner
+            // 
+            this.button_OpenScanner.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(37)))), ((int)(((byte)(99)))), ((int)(((byte)(235)))));
+            this.button_OpenScanner.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenScanner.FlatAppearance.BorderSize = 0;
+            this.button_OpenScanner.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_OpenScanner.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
             this.button_OpenScanner.ForeColor = System.Drawing.Color.White;
-            this.button_OpenScanner.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenScanner.Location = new System.Drawing.Point(50, 60);
+            this.button_OpenScanner.Name = "button_OpenScanner";
             this.button_OpenScanner.Size = new System.Drawing.Size(300, 100);
+            this.button_OpenScanner.TabIndex = 0;
             this.button_OpenScanner.Text = "🔍  Full Scanner";
+            this.button_OpenScanner.UseVisualStyleBackColor = false;
             this.button_OpenScanner.Click += new System.EventHandler(this.button_OpenScanner_Click);
-
-            this.label_ScannerDesc.AutoSize = false;
+            // 
+            // label_ScannerDesc
+            // 
             this.label_ScannerDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.label_ScannerDesc.ForeColor = System.Drawing.Color.FromArgb(71, 85, 105);
+            this.label_ScannerDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
             this.label_ScannerDesc.Location = new System.Drawing.Point(50, 170);
+            this.label_ScannerDesc.Name = "label_ScannerDesc";
             this.label_ScannerDesc.Size = new System.Drawing.Size(300, 50);
+            this.label_ScannerDesc.TabIndex = 1;
             this.label_ScannerDesc.Text = "HTTPS, security headers, cookies,\nSQL injection hints, XSS, ports, DNS";
             this.label_ScannerDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-
-            // ── Card 2 · Brute Force ────────────────────────────────────────────
-            this.button_OpenBruteForce.BackColor = System.Drawing.Color.FromArgb(220, 38, 38);
-            this.button_OpenBruteForce.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            // 
+            // button_OpenBruteForce
+            // 
+            this.button_OpenBruteForce.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(38)))), ((int)(((byte)(38)))));
+            this.button_OpenBruteForce.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenBruteForce.FlatAppearance.BorderSize = 0;
+            this.button_OpenBruteForce.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_OpenBruteForce.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
             this.button_OpenBruteForce.ForeColor = System.Drawing.Color.White;
-            this.button_OpenBruteForce.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenBruteForce.Location = new System.Drawing.Point(400, 60);
+            this.button_OpenBruteForce.Name = "button_OpenBruteForce";
             this.button_OpenBruteForce.Size = new System.Drawing.Size(300, 100);
+            this.button_OpenBruteForce.TabIndex = 2;
             this.button_OpenBruteForce.Text = "🔐  Brute Force";
+            this.button_OpenBruteForce.UseVisualStyleBackColor = false;
             this.button_OpenBruteForce.Click += new System.EventHandler(this.button_OpenBruteForce_Click);
-
-            this.label_BruteDesc.AutoSize = false;
+            // 
+            // label_BruteDesc
+            // 
             this.label_BruteDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.label_BruteDesc.ForeColor = System.Drawing.Color.FromArgb(71, 85, 105);
+            this.label_BruteDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
             this.label_BruteDesc.Location = new System.Drawing.Point(400, 170);
+            this.label_BruteDesc.Name = "label_BruteDesc";
             this.label_BruteDesc.Size = new System.Drawing.Size(300, 50);
+            this.label_BruteDesc.TabIndex = 3;
             this.label_BruteDesc.Text = "Auto-detect ASP.NET / PHP / HTML forms\nand attack with a wordlist";
             this.label_BruteDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-
-            // ── Card 3 · API Tester ─────────────────────────────────────────────
-            this.button_OpenApiTester.BackColor = System.Drawing.Color.FromArgb(5, 150, 105);
-            this.button_OpenApiTester.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            // 
+            // button_OpenApiTester
+            // 
+            this.button_OpenApiTester.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(5)))), ((int)(((byte)(150)))), ((int)(((byte)(105)))));
+            this.button_OpenApiTester.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenApiTester.FlatAppearance.BorderSize = 0;
+            this.button_OpenApiTester.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_OpenApiTester.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
             this.button_OpenApiTester.ForeColor = System.Drawing.Color.White;
-            this.button_OpenApiTester.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenApiTester.Location = new System.Drawing.Point(750, 60);
+            this.button_OpenApiTester.Name = "button_OpenApiTester";
             this.button_OpenApiTester.Size = new System.Drawing.Size(300, 100);
+            this.button_OpenApiTester.TabIndex = 4;
             this.button_OpenApiTester.Text = "🛰  API Tester";
+            this.button_OpenApiTester.UseVisualStyleBackColor = false;
             this.button_OpenApiTester.Click += new System.EventHandler(this.button_OpenApiTester_Click);
-
-            this.label_ApiDesc.AutoSize = false;
+            // 
+            // label_ApiDesc
+            // 
             this.label_ApiDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.label_ApiDesc.ForeColor = System.Drawing.Color.FromArgb(71, 85, 105);
+            this.label_ApiDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
             this.label_ApiDesc.Location = new System.Drawing.Point(750, 170);
+            this.label_ApiDesc.Name = "label_ApiDesc";
             this.label_ApiDesc.Size = new System.Drawing.Size(300, 50);
+            this.label_ApiDesc.TabIndex = 5;
             this.label_ApiDesc.Text = "Postman-style HTTP tester with auth,\nheaders, params, body & wordlist fuzzing";
             this.label_ApiDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-
-            // ── Disclaimer ──────────────────────────────────────────────────────
-            this.label_Disclaimer.AutoSize = false;
+            // 
+            // label_Disclaimer
+            // 
             this.label_Disclaimer.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.label_Disclaimer.Height = 28;
             this.label_Disclaimer.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Italic);
-            this.label_Disclaimer.ForeColor = System.Drawing.Color.FromArgb(148, 163, 184);
+            this.label_Disclaimer.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
+            this.label_Disclaimer.Location = new System.Drawing.Point(0, 235);
+            this.label_Disclaimer.Name = "label_Disclaimer";
+            this.label_Disclaimer.Size = new System.Drawing.Size(1100, 28);
+            this.label_Disclaimer.TabIndex = 6;
             this.label_Disclaimer.Text = "⚠️  For authorized penetration testing only. Unauthorized use is illegal.";
             this.label_Disclaimer.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-
-            // ── MainForm ────────────────────────────────────────────────────────
+            // 
+            // MainForm
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(248, 249, 250);
-            this.ClientSize = new System.Drawing.Size(1100, 310);
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
+            this.ClientSize = new System.Drawing.Size(1100, 343);
             this.Controls.Add(this.panel_Cards);
             this.Controls.Add(this.panel_TopBar);
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
@@ -141,11 +184,11 @@
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "ThreatScanner — Select Tool";
-
             this.panel_TopBar.ResumeLayout(false);
             this.panel_TopBar.PerformLayout();
             this.panel_Cards.ResumeLayout(false);
             this.ResumeLayout(false);
+
         }
 
         #endregion
