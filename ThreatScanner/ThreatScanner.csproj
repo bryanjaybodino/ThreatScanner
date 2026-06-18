@@ -76,6 +76,27 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApiTesterForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ApiTesterForm.Designer.cs">
+      <DependentUpon>ApiTesterForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="BruteForceForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="BruteForceForm.Designer.cs">
+      <DependentUpon>BruteForceForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="FullScannerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FullScannerForm.Designer.cs">
+      <DependentUpon>FullScannerForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Helpers\HtmlHelpers.cs" />
+    <Compile Include="Helpers\JsonEditorHelper.cs" />
+    <Compile Include="Helpers\ScanHelpers.cs" />
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -84,6 +105,15 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="ApiTesterForm.resx">
+      <DependentUpon>ApiTesterForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="BruteForceForm.resx">
+      <DependentUpon>BruteForceForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FullScannerForm.resx">
+      <DependentUpon>FullScannerForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
