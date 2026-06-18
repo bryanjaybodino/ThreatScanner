@@ -12,23 +12,20 @@ using ThreatScanner.Helpers;
 
 namespace ThreatScanner
 {
-    /// <summary>
-    /// CSRF Tester — probes target forms for missing/weak CSRF token protections,
-    /// SameSite cookie deficiencies, CORS misconfigurations, and optionally
-    /// replays a captured request with a forged/missing token to confirm exploitability.
-    /// </summary>
     public partial class CsrfTesterForm : Form
     {
         private HttpClient _client;
+
+        // Stores the last auto-detected form fields (including hidden/token fields)
+        private List<KeyValuePair<string, string>> _autoFields = new List<KeyValuePair<string, string>>();
+        private string _detectedFramework = "";
+        private string _detectedAction = "";
 
         public CsrfTesterForm()
         {
             InitializeComponent();
             ResetClient();
-
-            // Enable Delete-key row removal on the custom-headers grid
             ScanHelpers.EnableRowDeletion(dataGridView_Headers);
-
             if (comboBox_Method.SelectedIndex < 0)
                 comboBox_Method.SelectedIndex = 0;
         }
@@ -62,6 +59,241 @@ namespace ThreatScanner
             if (!running) progressBar_Scan.Value = 0;
         }
 
+        // =========================================================================
+        // AUTO-FILL FROM URL
+        // Fetches the page, detects framework, parses all form fields,
+        // and populates the Forge tab body automatically.
+        // =========================================================================
+
+        private async void button_AutoFill_Click(object sender, EventArgs e)
+        {
+            string rawUrl = textBox_ForgeUrl.Text.Trim();
+            if (string.IsNullOrWhiteSpace(rawUrl))
+            {
+                MessageBox.Show("Enter an Endpoint URL first, then click Auto-Fill.",
+                    "ThreatScanner", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string url = ScanHelpers.NormalizeUrl(rawUrl);
+            ResetClient();
+
+            button_AutoFill.Enabled = false;
+            SetProgress(true);
+            ClearOut();
+            Log("🔄", $"Auto-Fill → fetching {url}");
+            LogSep();
+
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    string html = null;
+                    try
+                    {
+                        var resp = await _client.GetAsync(url);
+                        html = await resp.Content.ReadAsStringAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Invoke((Action)(() => Log("❌", "Fetch failed: " + ex.Message)));
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(html))
+                    {
+                        Invoke((Action)(() => Log("❌", "Empty response — nothing to parse.")));
+                        return;
+                    }
+
+                    // ── Detect framework ─────────────────────────────────────────
+                    bool isAspNetWebForms = html.IndexOf("__VIEWSTATE", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool isAspNetMvc = html.IndexOf("__RequestVerificationToken", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool isPhp = html.IndexOf(".php", StringComparison.OrdinalIgnoreCase) >= 0
+                                 || url.IndexOf(".php", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool isLaravel = html.IndexOf("_token", StringComparison.OrdinalIgnoreCase) >= 0 && isPhp;
+                    bool isDjango = html.IndexOf("csrfmiddlewaretoken", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool isRails = html.IndexOf("authenticity_token", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    string fw;
+                    if (isAspNetWebForms) fw = "ASP.NET WebForms";
+                    else if (isAspNetMvc) fw = "ASP.NET MVC";
+                    else if (isLaravel) fw = "PHP Laravel";
+                    else if (isDjango) fw = "Django";
+                    else if (isRails) fw = "Ruby on Rails";
+                    else if (isPhp) fw = "PHP (plain)";
+                    else fw = "Plain HTML";
+
+                    _detectedFramework = fw;
+
+                    // ── Find the first POST form ──────────────────────────────────
+                    // Try to find a login/auth form first, else fall back to first POST form
+                    var formMatch = FindBestForm(html);
+                    if (formMatch == null)
+                    {
+                        Invoke((Action)(() =>
+                        {
+                            Log("⚠️", "No POST form found on this page.");
+                            Log("ℹ️", "Framework detected: " + fw);
+                        }));
+                        return;
+                    }
+
+                    string formHtml = formMatch.Value;
+
+                    // Extract form action
+                    string action = ExtractAttr(formHtml, "action");
+                    _detectedAction = string.IsNullOrEmpty(action) ? url : BuildAbsoluteUrl(url, action);
+
+                    // ── Parse all input fields ────────────────────────────────────
+                    var fields = new List<KeyValuePair<string, string>>();
+
+                    // All <input> tags
+                    foreach (Match m in Regex.Matches(formHtml, @"<input[^>]*>", RegexOptions.IgnoreCase))
+                    {
+                        string tag = m.Value;
+                        string type = ExtractAttr(tag, "type").ToLowerInvariant();
+                        string name = ExtractAttr(tag, "name");
+                        string val = ExtractAttr(tag, "value");
+
+                        if (string.IsNullOrEmpty(name)) continue;
+                        if (type == "submit" || type == "image" || type == "button" || type == "reset") continue;
+
+                        fields.Add(new KeyValuePair<string, string>(name, val));
+                    }
+
+                    // All <select> tags — pick first <option>
+                    foreach (Match m in Regex.Matches(formHtml, @"<select[^>]*>[\s\S]*?</select>", RegexOptions.IgnoreCase))
+                    {
+                        string tag = m.Value;
+                        string name = ExtractAttr(tag, "name");
+                        if (string.IsNullOrEmpty(name)) continue;
+                        var optMatch = Regex.Match(tag, @"<option[^>]*value=[""']?([^""'\s>]*)", RegexOptions.IgnoreCase);
+                        string optVal = optMatch.Success ? optMatch.Groups[1].Value : "";
+                        fields.Add(new KeyValuePair<string, string>(name, optVal));
+                    }
+
+                    // All <textarea> tags
+                    foreach (Match m in Regex.Matches(formHtml, @"<textarea[^>]*>([\s\S]*?)</textarea>", RegexOptions.IgnoreCase))
+                    {
+                        string tag = m.Value;
+                        string name = ExtractAttr(tag, "name");
+                        if (string.IsNullOrEmpty(name)) continue;
+                        string content = Regex.Match(tag, @">([\s\S]*?)</textarea>", RegexOptions.IgnoreCase).Groups[1].Value.Trim();
+                        fields.Add(new KeyValuePair<string, string>(name, content));
+                    }
+
+                    _autoFields = fields;
+
+                    // ── Identify which fields are CSRF tokens ─────────────────────
+                    var csrfTokenNames = new[] {
+                        "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
+                        "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
+                    };
+
+                    // ── Build the body text for the textbox ───────────────────────
+                    // Group: hidden/token fields first, then user-facing fields
+                    var bodyLines = new List<string>();
+                    var tokenFields = new List<string>();
+                    var userFields = new List<string>();
+
+                    foreach (var kv in fields)
+                    {
+                        bool isToken = csrfTokenNames.Any(t =>
+                            kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+                        // ASP.NET WebForms hidden system fields
+                        bool isHidden = kv.Key.StartsWith("__", StringComparison.Ordinal);
+
+                        if (isToken || isHidden)
+                            tokenFields.Add($"{kv.Key}={kv.Value}");
+                        else
+                            userFields.Add($"{kv.Key}=");   // leave user fields blank for tester to fill
+                    }
+
+                    bodyLines.Add("# ── Hidden / Framework fields (auto-filled) ──");
+                    bodyLines.AddRange(tokenFields);
+                    bodyLines.Add("");
+                    bodyLines.Add("# ── User input fields (fill these in) ──");
+                    bodyLines.AddRange(userFields);
+
+                    string bodyText = string.Join("\r\n", bodyLines);
+
+                    Invoke((Action)(() =>
+                    {
+                        // Populate the Forge tab
+                        textBox_ForgeBody.Text = bodyText;
+                        textBox_ForgeUrl.Text = _detectedAction;
+                        comboBox_Method.SelectedItem = "POST";
+
+                        Log("✅", $"Framework detected: {fw}");
+                        Log("✅", $"Form action: {_detectedAction}");
+                        Log("✅", $"Fields found: {fields.Count}");
+                        LogSep();
+
+                        // Summarise what was found
+                        foreach (var kv in fields)
+                        {
+                            bool isToken = csrfTokenNames.Any(t =>
+                                kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                            if (isToken)
+                                Log("🔑", $"  CSRF token field: [{kv.Key}]  ({(kv.Value.Length > 0 ? $"value len={kv.Value.Length}" : "empty")})");
+                            else if (kv.Key.StartsWith("__"))
+                                Log("⚙️", $"  Framework field: [{kv.Key}]  len={kv.Value.Length}");
+                            else
+                                Log("✏️", $"  User field: [{kv.Key}]");
+                        }
+
+                        LogSep();
+                        Log("ℹ️", "Body auto-filled in the Forge tab.");
+                        Log("ℹ️", "Fill in the user fields (username/password/etc.) then click ⚡ Send Forged Request.");
+
+                        // Switch to Forge tab
+                        tabControl_Main.SelectedTab = tabPage_Forge;
+                    }));
+                });
+            }
+            catch (Exception ex)
+            {
+                Log("❌", "Auto-Fill error: " + ex.Message);
+            }
+            finally
+            {
+                Invoke((Action)(() =>
+                {
+                    button_AutoFill.Enabled = true;
+                    SetProgress(false);
+                }));
+            }
+        }
+
+        // ─── FIND BEST FORM ───────────────────────────────────────────────────────
+        // Prefer login/auth POST forms, fall back to first POST form
+
+        private Match FindBestForm(string html)
+        {
+            var allForms = Regex.Matches(html, @"<form[\s\S]*?</form>",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            Match firstPost = null;
+            foreach (Match m in allForms)
+            {
+                string method = ExtractAttr(m.Value, "method");
+                bool isPost = string.IsNullOrEmpty(method) ||
+                              method.Equals("post", StringComparison.OrdinalIgnoreCase);
+                if (!isPost) continue;
+
+                if (firstPost == null) firstPost = m;
+
+                string lower = m.Value.ToLowerInvariant();
+                if (lower.Contains("login") || lower.Contains("password") ||
+                    lower.Contains("signin") || lower.Contains("username") ||
+                    lower.Contains("email"))
+                    return m;   // Best match — login form
+            }
+            return firstPost;
+        }
+
         // ─── MAIN SCAN ────────────────────────────────────────────────────────────
 
         private async void button_Scan_Click(object sender, EventArgs e)
@@ -77,10 +309,8 @@ namespace ThreatScanner
 
             string url = ScanHelpers.NormalizeUrl(rawUrl);
             ResetClient();
-
             button_Scan.Enabled = false;
             SetProgress(true);
-
             Log("🛡", $"CSRF Scan → {url}");
             LogSep();
 
@@ -88,24 +318,14 @@ namespace ThreatScanner
             {
                 await Task.Run(async () =>
                 {
-                    // 1. Fetch the page and analyse cookies
                     string html = await FetchAndCheckCookies(url);
-
-                    // 2. Parse all forms and check for CSRF tokens
                     if (!string.IsNullOrEmpty(html))
                         CheckForms(html, url);
-
-                    // 3. CORS origin reflection check
                     await CheckCors(url);
-
-                    // 4. Referer / Origin header enforcement check
                     await CheckRefererEnforcement(url);
                 });
             }
-            catch (Exception ex)
-            {
-                Log("❌", "Scan error: " + ex.Message);
-            }
+            catch (Exception ex) { Log("❌", "Scan error: " + ex.Message); }
             finally
             {
                 Invoke((Action)(() =>
@@ -122,26 +342,18 @@ namespace ThreatScanner
 
         private async Task<string> FetchAndCheckCookies(string url)
         {
-            Invoke((Action)(() =>
-            {
-                Log("🍪", "── Cookie / SameSite Analysis ──────────────────────");
-            }));
-
+            Invoke((Action)(() => Log("🍪", "── Cookie / SameSite Analysis ──────────────────────")));
             try
             {
-                var req = new HttpRequestMessage(HttpMethod.Get, url);
-                var resp = await _client.SendAsync(req);
+                var resp = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, url));
                 string html = await resp.Content.ReadAsStringAsync();
 
-                // Collect Set-Cookie headers
                 IEnumerable<string> setCookies = Enumerable.Empty<string>();
                 if (resp.Headers.Contains("Set-Cookie"))
                     setCookies = resp.Headers.GetValues("Set-Cookie");
 
                 if (!setCookies.Any())
-                {
                     Invoke((Action)(() => Log("ℹ️", "No Set-Cookie headers found on initial response.")));
-                }
                 else
                 {
                     foreach (string cookie in setCookies)
@@ -160,21 +372,18 @@ namespace ThreatScanner
                                 $"  HttpOnly: {(hasHttpOnly ? "Yes" : "MISSING — accessible via JavaScript")}");
                             Log(hasSecure ? "✅" : "⚠️",
                                 $"  Secure:   {(hasSecure ? "Yes" : "MISSING — sent over plain HTTP")}");
-
                             if (hasSameSiteStrict)
                                 Log("✅", "  SameSite: Strict — best CSRF protection");
                             else if (hasSameSiteLax)
-                                Log("⚠️", "  SameSite: Lax — partial protection (GET requests still cross-site)");
+                                Log("⚠️", "  SameSite: Lax — partial protection");
                             else if (hasSameSiteNone)
                                 Log("🚨", "  SameSite: None — cookie sent on ALL cross-site requests (CSRF risk)");
                             else
-                                Log("🚨", "  SameSite: NOT SET — browser may default to Lax, but explicit value required");
-
+                                Log("🚨", "  SameSite: NOT SET — explicit value required");
                             LogSep();
                         }));
                     }
                 }
-
                 return html;
             }
             catch (Exception ex)
@@ -188,12 +397,8 @@ namespace ThreatScanner
 
         private void CheckForms(string html, string baseUrl)
         {
-            Invoke((Action)(() =>
-            {
-                Log("📋", "── Form CSRF Token Analysis ────────────────────────");
-            }));
+            Invoke((Action)(() => Log("📋", "── Form CSRF Token Analysis ────────────────────────")));
 
-            // Find all <form> blocks
             var formMatches = Regex.Matches(html, @"<form[\s\S]*?</form>",
                 RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
@@ -205,11 +410,10 @@ namespace ThreatScanner
 
             Invoke((Action)(() => Log("ℹ️", $"Found {formMatches.Count} form(s).")));
 
-            // Known CSRF token field name patterns
             var csrfPatterns = new[]
             {
                 "csrf", "xsrf", "_token", "authenticity_token", "__requestverificationtoken",
-                "csrfmiddlewaretoken", "csrf_token", "anti_csrf", "nonce", "_wpnonce"
+                "csrfmiddlewaretoken", "csrf_token", "anti_csrf", "nonce", "_wpnonce", "__eventvalidation"
             };
 
             int formIndex = 0;
@@ -217,51 +421,38 @@ namespace ThreatScanner
             {
                 formIndex++;
                 string formHtml = formMatch.Value;
-
-                // Extract form action
                 string action = ExtractAttr(formHtml, "action");
                 string method = ExtractAttr(formHtml, "method");
                 if (string.IsNullOrEmpty(method)) method = "GET";
                 string actionDisplay = string.IsNullOrEmpty(action) ? "(same page)" : action;
 
-                // Find all input fields in this form
-                var inputMatches = Regex.Matches(formHtml, @"<input[^>]*>", RegexOptions.IgnoreCase);
-                var fieldNames = inputMatches
+                var fieldNames = Regex.Matches(formHtml, @"<input[^>]*>", RegexOptions.IgnoreCase)
                     .Cast<Match>()
                     .Select(m => ExtractAttr(m.Value, "name").ToLowerInvariant())
                     .Where(n => !string.IsNullOrEmpty(n))
                     .ToList();
 
-                bool hasCsrfToken = fieldNames.Any(n =>
-                    csrfPatterns.Any(p => n.Contains(p)));
-
+                bool hasCsrfToken = fieldNames.Any(n => csrfPatterns.Any(p => n.Contains(p)));
                 string foundTokenField = hasCsrfToken
                     ? fieldNames.FirstOrDefault(n => csrfPatterns.Any(p => n.Contains(p)))
                     : null;
-
-                // Check if form uses POST (GET forms are generally not CSRF-relevant for state changes)
                 bool isPost = method.Equals("POST", StringComparison.OrdinalIgnoreCase);
 
                 Invoke((Action)(() =>
                 {
                     Log("📋", $"Form #{formIndex} — Action: {actionDisplay}  Method: {method.ToUpper()}");
-
                     if (!isPost)
-                    {
-                        Log("ℹ️", "  GET form — typically not a CSRF risk for state-changing operations.");
-                    }
+                        Log("ℹ️", "  GET form — typically not a CSRF risk.");
                     else if (hasCsrfToken)
                     {
-                        Log("✅", $"  CSRF token found: [{foundTokenField}] — form appears protected.");
-                        Log("⚠️", "  ⚡ Verify: token must be unique per session, validated server-side, and not predictable.");
+                        Log("✅", $"  CSRF token found: [{foundTokenField}]");
+                        Log("⚠️", "  Verify it is unique per session and validated server-side.");
                     }
                     else
                     {
                         Log("🚨", "  NO CSRF TOKEN detected in this POST form — potentially vulnerable!");
-                        Log("🚨", $"  Fields found: {string.Join(", ", fieldNames.Take(10))}");
-                        Log("🚨", "  An attacker could forge a cross-site request using this form.");
+                        Log("🚨", $"  Fields: {string.Join(", ", fieldNames.Take(10))}");
                     }
-
                     LogSep();
                 }));
             }
@@ -271,123 +462,82 @@ namespace ThreatScanner
 
         private async Task CheckCors(string url)
         {
-            Invoke((Action)(() =>
-            {
-                Log("🌐", "── CORS Origin Reflection Check ────────────────────");
-            }));
-
+            Invoke((Action)(() => Log("🌐", "── CORS Origin Reflection Check ────────────────────")));
             try
             {
-                // Send a request with a fake attacker origin
                 string attackerOrigin = "https://evil-attacker.com";
                 var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.TryAddWithoutValidation("Origin", attackerOrigin);
-
                 var resp = await _client.SendAsync(req);
 
-                string acao = "";
-                if (resp.Headers.Contains("Access-Control-Allow-Origin"))
-                    acao = string.Join(", ", resp.Headers.GetValues("Access-Control-Allow-Origin"));
-
-                string acac = "";
-                if (resp.Headers.Contains("Access-Control-Allow-Credentials"))
-                    acac = string.Join(", ", resp.Headers.GetValues("Access-Control-Allow-Credentials"));
+                string acao = resp.Headers.Contains("Access-Control-Allow-Origin")
+                    ? string.Join(", ", resp.Headers.GetValues("Access-Control-Allow-Origin")) : "";
+                string acac = resp.Headers.Contains("Access-Control-Allow-Credentials")
+                    ? string.Join(", ", resp.Headers.GetValues("Access-Control-Allow-Credentials")) : "";
 
                 Invoke((Action)(() =>
                 {
                     if (string.IsNullOrEmpty(acao))
-                    {
-                        Log("✅", "Access-Control-Allow-Origin: not present — no CORS policy exposed.");
-                    }
+                        Log("✅", "Access-Control-Allow-Origin: not present.");
                     else if (acao == "*")
-                    {
-                        Log("⚠️", $"Access-Control-Allow-Origin: * (wildcard)");
-                        Log("ℹ️", "  Wildcard alone cannot be combined with credentials, but exposes public data.");
-                    }
+                        Log("⚠️", "Access-Control-Allow-Origin: * (wildcard)");
                     else if (acao.Equals(attackerOrigin, StringComparison.OrdinalIgnoreCase))
                     {
-                        Log("🚨", $"Access-Control-Allow-Origin REFLECTS attacker origin: {acao}");
+                        Log("🚨", $"ACAO REFLECTS attacker origin: {acao}");
                         if (acac.Equals("true", StringComparison.OrdinalIgnoreCase))
-                            Log("🚨", "  Access-Control-Allow-Credentials: true — CRITICAL! Cookies sent cross-origin. CSRF via CORS possible.");
+                            Log("🚨", "  + Credentials: true — CRITICAL! CSRF via CORS possible.");
                         else
-                            Log("⚠️", "  Credentials not allowed, but arbitrary origin is reflected — review CORS policy.");
+                            Log("⚠️", "  Arbitrary origin reflected — review CORS policy.");
                     }
                     else
-                    {
-                        Log("✅", $"Access-Control-Allow-Origin: {acao} (attacker origin NOT reflected)");
-                    }
+                        Log("✅", $"Access-Control-Allow-Origin: {acao} (attacker NOT reflected)");
 
                     if (!string.IsNullOrEmpty(acac))
                         Log("ℹ️", $"Access-Control-Allow-Credentials: {acac}");
-
                     LogSep();
                 }));
             }
-            catch (Exception ex)
-            {
-                Invoke((Action)(() => Log("❌", "CORS check failed: " + ex.Message)));
-            }
+            catch (Exception ex) { Invoke((Action)(() => Log("❌", "CORS check failed: " + ex.Message))); }
         }
 
         // ─── STEP 4: REFERER / ORIGIN ENFORCEMENT ────────────────────────────────
 
         private async Task CheckRefererEnforcement(string url)
         {
-            Invoke((Action)(() =>
-            {
-                Log("🔗", "── Referer / Origin Header Enforcement ─────────────");
-            }));
-
+            Invoke((Action)(() => Log("🔗", "── Referer / Origin Header Enforcement ─────────────")));
             try
             {
-                // Test 1: Completely omit the Referer header (default browser cross-site behaviour)
                 var req1 = new HttpRequestMessage(HttpMethod.Get, url);
                 req1.Headers.TryAddWithoutValidation("Origin", "https://evil-attacker.com");
                 var resp1 = await _client.SendAsync(req1);
 
-                // Test 2: Send a mismatched Referer
                 var req2 = new HttpRequestMessage(HttpMethod.Get, url);
                 req2.Headers.TryAddWithoutValidation("Referer", "https://evil-attacker.com/csrf.html");
                 var resp2 = await _client.SendAsync(req2);
 
                 Invoke((Action)(() =>
                 {
-                    int code1 = (int)resp1.StatusCode;
-                    int code2 = (int)resp2.StatusCode;
-
-                    // If both return 200, the server is not checking Origin/Referer
-                    bool possiblyEnforced = code1 == 403 || code1 == 401 || code2 == 403 || code2 == 401;
-
-                    Log("ℹ️", $"Request with attacker Origin: HTTP {code1} {resp1.ReasonPhrase}");
-                    Log("ℹ️", $"Request with attacker Referer: HTTP {code2} {resp2.ReasonPhrase}");
-
-                    if (possiblyEnforced)
-                    {
-                        Log("✅", "Server appears to reject requests with mismatched Origin/Referer (403/401).");
-                        Log("⚠️", "Verify this applies to ALL state-changing endpoints, not just GET.");
-                    }
+                    int c1 = (int)resp1.StatusCode, c2 = (int)resp2.StatusCode;
+                    Log("ℹ️", $"Request with attacker Origin:  HTTP {c1} {resp1.ReasonPhrase}");
+                    Log("ℹ️", $"Request with attacker Referer: HTTP {c2} {resp2.ReasonPhrase}");
+                    if (c1 == 403 || c1 == 401 || c2 == 403 || c2 == 401)
+                        Log("✅", "Server appears to reject forged Origin/Referer.");
                     else
                     {
-                        Log("⚠️", "Server did NOT reject requests with a forged Origin/Referer.");
-                        Log("⚠️", "This alone is not conclusive (many servers intentionally ignore these headers).");
-                        Log("ℹ️", "Combine with the form token and SameSite findings above for full risk assessment.");
+                        Log("⚠️", "Server did NOT reject forged Origin/Referer.");
+                        Log("ℹ️", "Combine with form token and SameSite findings for full assessment.");
                     }
-
                     LogSep();
                 }));
             }
-            catch (Exception ex)
-            {
-                Invoke((Action)(() => Log("❌", "Referer check failed: " + ex.Message)));
-            }
+            catch (Exception ex) { Invoke((Action)(() => Log("❌", "Referer check failed: " + ex.Message))); }
         }
 
-        // ─── PROOF-OF-CONCEPT FORGE ───────────────────────────────────────────────
+        // ─── FORGE REQUEST ────────────────────────────────────────────────────────
 
         private async void button_ForgeRequest_Click(object sender, EventArgs e)
         {
             ClearOut();
-
             string rawUrl = textBox_ForgeUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(rawUrl))
             {
@@ -398,18 +548,42 @@ namespace ThreatScanner
 
             string url = ScanHelpers.NormalizeUrl(rawUrl);
             string method = comboBox_Method.SelectedItem?.ToString() ?? "POST";
-            string body = textBox_ForgeBody.Text.Trim();
             string origin = textBox_ForgeOrigin.Text.Trim();
             bool omitToken = checkBox_OmitToken.Checked;
-
             var extraHeaders = ScanHelpers.GetEnabledGridRows(dataGridView_Headers, "col_CsrfHdrKey", "col_CsrfHdrValue");
+
+            // Parse body — skip comment lines (starting with #)
+            string bodyText = textBox_ForgeBody.Text.Trim();
+            var pairs = bodyText
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(l => !l.TrimStart().StartsWith("#"))
+                .Select(p => p.Split(new[] { '=' }, 2))
+                .Where(p => p.Length == 2 && !string.IsNullOrWhiteSpace(p[0]))
+                .Select(p => new KeyValuePair<string, string>(p[0].Trim(), p[1].Trim()))
+                .ToList();
+
+            // Remove CSRF token fields if checkbox is ticked
+            if (omitToken)
+            {
+                var csrfNames = new[] {
+                    "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
+                    "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
+                };
+                pairs = pairs.Where(kv =>
+                    !csrfNames.Any(t => kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .ToList();
+            }
 
             button_ForgeRequest.Enabled = false;
             SetProgress(true);
 
             Log("⚡", $"Forged {method} → {url}");
-            Log("ℹ️", $"Simulating cross-site request from: {(string.IsNullOrEmpty(origin) ? "(no origin)" : origin)}");
-            if (omitToken) Log("🚨", "CSRF token deliberately OMITTED from request.");
+            if (!string.IsNullOrEmpty(origin))
+                Log("ℹ️", $"Simulating cross-site request from: {origin}");
+            if (omitToken) Log("🚨", "CSRF token deliberately OMITTED.");
+            Log("📦", $"Sending {pairs.Count} field(s):");
+            foreach (var kv in pairs)
+                Log("   ", $"  {kv.Key} = {(kv.Value.Length > 60 ? kv.Value.Substring(0, 60) + "…" : kv.Value)}");
             LogSep();
 
             try
@@ -417,7 +591,6 @@ namespace ThreatScanner
                 await Task.Run(async () =>
                 {
                     ResetClient();
-
                     var req = new HttpRequestMessage(new HttpMethod(method), url);
 
                     if (!string.IsNullOrEmpty(origin))
@@ -426,26 +599,12 @@ namespace ThreatScanner
                         req.Headers.TryAddWithoutValidation("Referer", origin + "/csrf-poc.html");
                     }
 
-                    // Attach extra custom headers
                     foreach (var kv in extraHeaders)
                         if (!string.IsNullOrEmpty(kv.Key))
                             req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
 
-                    // Body
-                    if (!string.IsNullOrEmpty(body) && method != "GET" && method != "HEAD")
-                    {
-                        // Parse as form-urlencoded key=value pairs
-                        var pairs = body.Split(new[] { '\r', '\n', '&' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(p => p.Split(new[] { '=' }, 2))
-                            .Where(p => p.Length == 2)
-                            .Select(p => new KeyValuePair<string, string>(p[0].Trim(), p[1].Trim()))
-                            .ToList();
-
-                        if (pairs.Any())
-                            req.Content = new FormUrlEncodedContent(pairs);
-                        else
-                            req.Content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded");
-                    }
+                    if (method != "GET" && method != "HEAD" && pairs.Any())
+                        req.Content = new FormUrlEncodedContent(pairs);
 
                     var resp = await _client.SendAsync(req);
                     string respBody = await resp.Content.ReadAsStringAsync();
@@ -455,23 +614,22 @@ namespace ThreatScanner
                     {
                         string icon = code >= 200 && code < 300 ? "✅"
                                     : code >= 300 && code < 400 ? "ℹ️"
-                                    : code >= 400 && code < 500 ? "⚠️"
-                                    : "🚨";
-
+                                    : code >= 400 && code < 500 ? "⚠️" : "🚨";
                         Log(icon, $"HTTP {code}  {resp.ReasonPhrase}");
 
-                        // CSRF-specific verdict
                         if (code == 403 || code == 401)
-                            Log("✅", "Server REJECTED the forged request (403/401) — CSRF protection appears active.");
+                            Log("✅", "Server REJECTED the forged request — CSRF protection appears active.");
+                        else if (code == 500)
+                            Log("⚠️", "Server returned 500 — likely __EVENTVALIDATION / ViewState mismatch (ASP.NET WebForms protection).");
                         else if (code >= 200 && code < 300)
-                            Log("🚨", "Server ACCEPTED the forged cross-site request — endpoint may be CSRF vulnerable!");
+                            Log("🚨", "Server ACCEPTED the forged cross-site request — may be CSRF vulnerable!");
                         else if (code >= 300 && code < 400)
                         {
                             string loc = resp.Headers.Location?.ToString() ?? "";
                             if (loc.ToLower().Contains("login"))
-                                Log("ℹ️", $"Redirected to login — session not established. Redirect: {loc}");
+                                Log("ℹ️", $"Redirected to login — session required. Location: {loc}");
                             else
-                                Log("⚠️", $"Redirect to: {loc} — manual verification needed.");
+                                Log("⚠️", $"Redirect to: {loc} — verify manually.");
                         }
 
                         LogSep();
@@ -479,37 +637,26 @@ namespace ThreatScanner
                         foreach (var h in resp.Headers)
                             foreach (var v in h.Value)
                                 Log("→", $"  {h.Key}: {v}");
-
                         LogSep();
+
                         if (!string.IsNullOrWhiteSpace(respBody))
                         {
                             string[] lines = respBody.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-                            int lineCount = 0;
+                            int lc = 0;
                             foreach (string line in lines)
                             {
                                 if (string.IsNullOrWhiteSpace(line)) continue;
-                                string trimmed = line.Length > 300 ? line.Substring(0, 300) + "…" : line;
-                                Log("", trimmed);
-                                if (++lineCount >= 100)
-                                {
-                                    Log("…", $"(truncated — {lines.Length} total lines)");
-                                    break;
-                                }
+                                Log("", line.Length > 300 ? line.Substring(0, 300) + "…" : line);
+                                if (++lc >= 100) { Log("…", $"(truncated — {lines.Length} total lines)"); break; }
                             }
                         }
-                        else
-                        {
-                            Log("📄", "(empty response body)");
-                        }
+                        else Log("📄", "(empty response body)");
 
                         LogSep();
                     }));
                 });
             }
-            catch (Exception ex)
-            {
-                Log("❌", "Request error: " + ex.Message);
-            }
+            catch (Exception ex) { Log("❌", "Request error: " + ex.Message); }
             finally
             {
                 Invoke((Action)(() =>
@@ -534,10 +681,9 @@ namespace ThreatScanner
             }
 
             string method = comboBox_Method.SelectedItem?.ToString() ?? "POST";
-            string body = textBox_ForgeBody.Text.Trim();
-
-            // Parse body fields
-            var fields = body.Split(new[] { '\r', '\n', '&' }, StringSplitOptions.RemoveEmptyEntries)
+            var fields = textBox_ForgeBody.Text
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(l => !l.TrimStart().StartsWith("#"))
                 .Select(p => p.Split(new[] { '=' }, 2))
                 .Where(p => p.Length == 2)
                 .Select(p => (Key: Uri.UnescapeDataString(p[0].Trim()), Value: Uri.UnescapeDataString(p[1].Trim())))
@@ -546,46 +692,27 @@ namespace ThreatScanner
             var sb = new StringBuilder();
             sb.AppendLine("<!DOCTYPE html>");
             sb.AppendLine("<html>");
-            sb.AppendLine("<head>");
-            sb.AppendLine("  <title>CSRF PoC — ThreatScanner</title>");
-            sb.AppendLine("</head>");
+            sb.AppendLine("<head><title>CSRF PoC — ThreatScanner</title></head>");
             sb.AppendLine("<body>");
             sb.AppendLine("  <h1>CSRF Proof-of-Concept</h1>");
             sb.AppendLine($"  <p>Target: <b>{System.Net.WebUtility.HtmlEncode(targetUrl)}</b></p>");
             sb.AppendLine($"  <form action=\"{System.Net.WebUtility.HtmlEncode(targetUrl)}\" method=\"{method}\" id=\"csrfForm\">");
-
-            if (fields.Any())
-            {
-                foreach (var (Key, Value) in fields)
-                {
-                    sb.AppendLine($"    <input type=\"hidden\" name=\"{System.Net.WebUtility.HtmlEncode(Key)}\" " +
-                                  $"value=\"{System.Net.WebUtility.HtmlEncode(Value)}\" />");
-                }
-            }
-            else
-            {
-                sb.AppendLine("    <!-- Add hidden fields here matching the target form -->");
-                sb.AppendLine("    <!-- <input type=\"hidden\" name=\"fieldName\" value=\"fieldValue\" /> -->");
-            }
-
-            sb.AppendLine("    <input type=\"submit\" value=\"Click me (victim trigger)\" />");
+            foreach (var (Key, Value) in fields)
+                sb.AppendLine($"    <input type=\"hidden\" name=\"{System.Net.WebUtility.HtmlEncode(Key)}\" value=\"{System.Net.WebUtility.HtmlEncode(Value)}\" />");
+            sb.AppendLine("    <input type=\"submit\" value=\"Click me\" />");
             sb.AppendLine("  </form>");
             sb.AppendLine("  <script>");
-            sb.AppendLine("    // Auto-submit on page load (silent attack simulation):");
+            sb.AppendLine("    // Uncomment to auto-submit silently:");
             sb.AppendLine("    // document.getElementById('csrfForm').submit();");
             sb.AppendLine("  </script>");
-            sb.AppendLine("</body>");
-            sb.AppendLine("</html>");
+            sb.AppendLine("</body></html>");
 
             string poc = sb.ToString();
-
-            // Show in output and ask to save
             ClearOut();
             Log("⚡", "Generated CSRF Proof-of-Concept HTML:");
             LogSep();
             foreach (string line in poc.Split(new[] { '\n' }, StringSplitOptions.None))
                 Log("", line.TrimEnd());
-
             LogSep();
 
             var dlg = new SaveFileDialog
@@ -605,20 +732,26 @@ namespace ThreatScanner
 
         private static string ExtractAttr(string tag, string attr)
         {
-            foreach (string quote in new[] { "\"", "'" })
+            foreach (string q in new[] { "\"", "'" })
             {
-                string pattern = $"{attr}={quote}";
+                string pattern = $"{attr}={q}";
                 int start = tag.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
                 if (start >= 0)
                 {
                     start += pattern.Length;
-                    int end = tag.IndexOf(quote, start);
+                    int end = tag.IndexOf(q, start);
                     if (end >= 0) return tag.Substring(start, end - start);
                 }
             }
-            // attr=value with no quotes
-            var m = Regex.Match(tag, $@"{attr}=([^\s>]+)", RegexOptions.IgnoreCase);
+            var m = Regex.Match(tag, $@"{attr}=([^\s>""']+)", RegexOptions.IgnoreCase);
             return m.Success ? m.Groups[1].Value : "";
+        }
+
+        private static string BuildAbsoluteUrl(string baseUrl, string action)
+        {
+            if (string.IsNullOrEmpty(action)) return baseUrl;
+            try { return new Uri(new Uri(baseUrl), action).ToString(); }
+            catch { return baseUrl; }
         }
 
         // ─── SAVE / CLEAR ─────────────────────────────────────────────────────────
