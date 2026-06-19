@@ -306,7 +306,62 @@ namespace ThreatScanner
             try
             {
                 string host = new Uri(url).Host;
-                int[] ports = { 21, 22, 23, 25, 80, 443, 3306, 5432, 6379, 8080, 8443, 8888, 9200, 27017 };
+                int[] ports = {
+                    // Web servers / HTTP(S)
+                    80,    // HTTP
+                    443,   // HTTPS
+                    3000,  // Common dev server (React, Node/Express, etc.)
+                    3001,  // Alternate dev server
+                    4200,  // Angular CLI default
+                    5173,  // Vite default
+                    8080,  // Alternate HTTP / Tomcat / common proxy
+                    8443,  // Alternate HTTPS
+                    8888,  // Jupyter Notebook / alternate HTTP
+                    9000,  // PHP-FPM / common app port
+
+                    // Databases
+                    1433,  // Microsoft SQL Server
+                    1521,  // Oracle DB
+                    3306,  // MySQL / MariaDB
+                    5432,  // PostgreSQL
+                    6379,  // Redis
+                    7000,  // Cassandra (inter-node)
+                    7199,  // Cassandra (JMX)
+                    9042,  // Cassandra (CQL)
+                    27017, // MongoDB
+                    27018, // MongoDB shard
+                    27019, // MongoDB config server
+
+                    // Search / messaging / streaming
+                    2181,  // Zookeeper
+                    5672,  // RabbitMQ
+                    9092,  // Kafka
+                    9200,  // Elasticsearch (HTTP)
+                    9300,  // Elasticsearch (transport)
+                    15672, // RabbitMQ management UI
+
+                    // Remote access / file transfer
+                    21,    // FTP
+                    22,    // SSH / SFTP
+                    23,    // Telnet
+                    25,    // SMTP
+                    110,   // POP3
+                    143,   // IMAP
+
+                    // Containers / orchestration
+                    2375,  // Docker (unencrypted API)
+                    2376,  // Docker (TLS API)
+                    6443,  // Kubernetes API server
+                    10250, // Kubelet API
+
+                    // Misc dev tools
+                    389,   // LDAP
+                    5000,  // Flask default / Docker registry
+                    5601,  // Kibana
+                    8081,  // Alternate HTTP / Nexus / Kafka REST proxy
+                    9090,  // Prometheus
+                    3000   // Grafana (duplicate of above note, often reused)
+                };
                 foreach (int port in ports)
                 {
                     try
