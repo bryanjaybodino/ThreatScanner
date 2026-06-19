@@ -1,4 +1,10 @@
-﻿using Microsoft.Playwright;
+﻿// ═══════════════════════════════════════════════════════════════════════════
+//  CsrfTesterForm.cs  — CDP session managed by CdpHelper
+//  Replace only the CDP-related fields, constructor wiring, FormClosing,
+//  GetOrCreateActivePageAsync, EnsureEdgeRunningAsync, IsCdpReady, and
+//  GetEdgePath.  All other methods stay exactly as they were.
+// ═══════════════════════════════════════════════════════════════════════════
+using Microsoft.Playwright;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,34 +18,31 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ThreatScanner.Helpers;
+using ThreatScanner.Helpers;          // ← CdpHelper lives here
 
 namespace ThreatScanner
 {
     public partial class CsrfTesterForm : Form
     {
+        // ── CDP — now ONE field instead of three ──────────────────────────────
+        // REMOVED: _playwright, _browser, _activePage, CDP_ENDPOINT constants,
+        //          EDGE_PATH_X86/X64, EDGE_SESSION, CdpHttpClient
+        // REPLACED BY:
+        private CdpHelper _cdp;
 
-        // ── Constants ─────────────────────────────────────────────────────────
-        private const string CDP_ENDPOINT = "http://localhost:65535";
-        private const string EDGE_PATH_X86 = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
-        private const string EDGE_PATH_X64 = @"C:\Program Files\Microsoft\Edge\Application\msedge.exe";
-        private const string EDGE_SESSION = @"C:\EdgeSession";
+        // ── HTTP client (non-CDP, unchanged) ──────────────────────────────────
+        private static readonly HttpClient CdpHttpClient =
+            new HttpClient { Timeout = TimeSpan.FromSeconds(5) };   // kept only for CORS/referer probes
 
-        // Persistent browser session variables
-        private IPlaywright _playwright;
-        private IBrowser _browser;
-        private IPage _activePage;
-
-
-
-        private static readonly HttpClient CdpHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         private HttpClient _client;
+        private CookieContainer _cookieJar;
 
-        // Stores the last auto-detected form fields (including hidden/token fields)
+        // Form-detection state (unchanged)
         private List<KeyValuePair<string, string>> _autoFields = new List<KeyValuePair<string, string>>();
         private string _detectedFramework = "";
         private string _detectedAction = "";
 
+        // ── Constructor ───────────────────────────────────────────────────────
         public CsrfTesterForm()
         {
             InitializeComponent();
@@ -47,17 +50,36 @@ namespace ThreatScanner
             ScanHelpers.EnableRowDeletion(dataGridView_Headers);
             if (comboBox_Method.SelectedIndex < 0)
                 comboBox_Method.SelectedIndex = 0;
+
+            // Wire up CdpHelper with our own Log callback
+            _cdp = new CdpHelper((msg, isError) =>
+                Log(msg, isError ? Color.OrangeRed : (Color?)null));
+
+            this.FormClosing += CsrfTesterForm_FormClosing;
         }
 
-        // ─── HTTP CLIENT ──────────────────────────────────────────────────────────
+        private void CsrfTesterForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Disconnect from Edge (does NOT close the browser window)
+            _cdp?.Dispose();
+        }
 
-        // Add this class-level field to track the cookie container
-        private CookieContainer _cookieJar;
+        // =========================================================================
+        //  GetOrCreateActivePageAsync — delegates to CdpHelper
+        // =========================================================================
+        private Task<IPage> GetOrCreateActivePageAsync() =>
+            _cdp.GetOrCreateActivePageAsync();
 
+        // EnsureEdgeRunningAsync / IsCdpReady / GetEdgePath
+        // — DELETED from this class; CdpHelper owns them.
+        //   Use CdpHelper.CDP_ENDPOINT if you need the constant string.
+
+
+        // ── HTTP CLIENT ──────────────────────────────────────────────────────────
         private void ResetClient()
         {
             _client?.Dispose();
-            _cookieJar = new CookieContainer(); // Store reference to update dynamically
+            _cookieJar = new CookieContainer();
 
             var handler = new HttpClientHandler
             {
@@ -70,14 +92,12 @@ namespace ThreatScanner
             _client.DefaultRequestHeaders.Add("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreatScanner/1.0");
         }
+
         private async Task SyncClientCookiesFromCdpAsync(string url)
         {
             try
             {
-                // Get or connect to the active Playwright/CDP page
                 IPage page = await GetOrCreateActivePageAsync();
-
-                // Fetch cookies from the current browser context for the specified domain
                 var contextCookies = await page.Context.CookiesAsync(new[] { url });
 
                 if (contextCookies != null && _cookieJar != null)
@@ -92,7 +112,6 @@ namespace ThreatScanner
                             Secure = c.Secure,
                             HttpOnly = c.HttpOnly
                         };
-
                         _cookieJar.Add(uri, cookie);
                     }
                     Log("🍪", $"Synchronized {contextCookies.Count} cookie(s) from CDP to HttpClient.");
@@ -103,24 +122,15 @@ namespace ThreatScanner
                 Log("❌", "Failed to sync cookies from CDP: " + ex.Message);
             }
         }
-        // ─── LOGGING ─────────────────────────────────────────────────────────────
 
+        // ── LOGGING ──────────────────────────────────────────────────────────────
+        // Icon-based: delegates to ScanHelpers for colour mapping + thread safety.
         private void Log(string icon, string msg) => ScanHelpers.LogRtb(richTextBox_Output, icon, msg);
 
-        private void Log(string message, Color? color = null)
-        {
-            if (richTextBox_Output.InvokeRequired)
-            {
-                richTextBox_Output.Invoke(new Action<string, Color?>(Log), message, color);
-                return;
-            }
-
-            richTextBox_Output.SelectionStart = richTextBox_Output.TextLength;
-            richTextBox_Output.SelectionLength = 0;
-            richTextBox_Output.SelectionColor = color.HasValue ? color.Value : Color.FromArgb(212, 212, 212);
-            richTextBox_Output.AppendText(string.Format("[{0:HH:mm:ss}]  {1}\r\n", DateTime.Now, message));
-            richTextBox_Output.ScrollToCaret();
-        }
+        // Timestamped + explicit-colour variant (CDP callbacks, error highlights).
+        // Delegates to ScanHelpers.LogRtbColor — no inline RTB logic here.
+        private void Log(string message, System.Drawing.Color? color = null)
+            => ScanHelpers.LogRtbColor(richTextBox_Output, message, color);
 
         private void LogSep() => ScanHelpers.LogSeparatorRtb(richTextBox_Output);
         private void ClearOut() => ScanHelpers.ClearOutputRtb(richTextBox_Output);
@@ -132,11 +142,8 @@ namespace ThreatScanner
         }
 
         // =========================================================================
-        // AUTO-FILL FROM URL
-        // Fetches the page, detects framework, parses all form fields,
-        // and populates the Forge tab body automatically.
+        //  AUTO-FILL FROM URL  (unchanged)
         // =========================================================================
-
         private async void button_AutoFill_Click(object sender, EventArgs e)
         {
             string rawUrl = textBox_ForgeUrl.Text.Trim();
@@ -148,7 +155,7 @@ namespace ThreatScanner
             }
 
             string url = ScanHelpers.NormalizeUrl(rawUrl);
-            ResetClient(); // Clears the client and sets up a fresh, empty cookie container
+            ResetClient();
 
             button_AutoFill.Enabled = false;
             SetProgress(true);
@@ -163,12 +170,7 @@ namespace ThreatScanner
                     string html = null;
                     try
                     {
-                        // ── ADD THIS LINE HERE ───────────────────────────────────────
-                        // Pull active session cookies from the live browser via CDP
-                        // and inject them into the freshly reset HttpClient handler.
                         await SyncClientCookiesFromCdpAsync(url);
-                        // ─────────────────────────────────────────────────────────────
-
                         var resp = await _client.GetAsync(url);
                         html = await resp.Content.ReadAsStringAsync();
                     }
@@ -184,11 +186,11 @@ namespace ThreatScanner
                         return;
                     }
 
-                    // ── Detect framework ─────────────────────────────────────────
+                    // ── Detect framework ──────────────────────────────────────
                     bool isAspNetWebForms = html.IndexOf("__VIEWSTATE", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool isAspNetMvc = html.IndexOf("__RequestVerificationToken", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool isPhp = html.IndexOf(".php", StringComparison.OrdinalIgnoreCase) >= 0
-                                 || url.IndexOf(".php", StringComparison.OrdinalIgnoreCase) >= 0;
+                                         || url.IndexOf(".php", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool isLaravel = html.IndexOf("_token", StringComparison.OrdinalIgnoreCase) >= 0 && isPhp;
                     bool isDjango = html.IndexOf("csrfmiddlewaretoken", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool isRails = html.IndexOf("authenticity_token", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -204,7 +206,6 @@ namespace ThreatScanner
 
                     _detectedFramework = fw;
 
-                    // ── Find the first POST form ──────────────────────────────────
                     var formMatch = FindBestForm(html);
                     if (formMatch == null)
                     {
@@ -217,29 +218,23 @@ namespace ThreatScanner
                     }
 
                     string formHtml = formMatch.Value;
-
-                    // Extract form action
                     string action = ExtractAttr(formHtml, "action");
                     _detectedAction = string.IsNullOrEmpty(action) ? url : BuildAbsoluteUrl(url, action);
 
-                    // ── Parse all input fields ────────────────────────────────────
+                    // ── Parse all input fields ────────────────────────────────
                     var fields = new List<KeyValuePair<string, string>>();
 
-                    // All <input> tags
                     foreach (Match m in Regex.Matches(formHtml, @"<input[^>]*>", RegexOptions.IgnoreCase))
                     {
                         string tag = m.Value;
                         string type = ExtractAttr(tag, "type").ToLowerInvariant();
                         string name = ExtractAttr(tag, "name");
                         string val = ExtractAttr(tag, "value");
-
                         if (string.IsNullOrEmpty(name)) continue;
                         if (type == "submit" || type == "image" || type == "button" || type == "reset") continue;
-
                         fields.Add(new KeyValuePair<string, string>(name, val));
                     }
 
-                    // All <select> tags
                     foreach (Match m in Regex.Matches(formHtml, @"<select[^>]*>[\s\S]*?</select>", RegexOptions.IgnoreCase))
                     {
                         string tag = m.Value;
@@ -250,7 +245,6 @@ namespace ThreatScanner
                         fields.Add(new KeyValuePair<string, string>(name, optVal));
                     }
 
-                    // All <textarea> tags
                     foreach (Match m in Regex.Matches(formHtml, @"<textarea[^>]*>([\s\S]*?)</textarea>", RegexOptions.IgnoreCase))
                     {
                         string tag = m.Value;
@@ -262,27 +256,23 @@ namespace ThreatScanner
 
                     _autoFields = fields;
 
-                    // ── Identify which fields are CSRF tokens ─────────────────────
-                    var csrfTokenNames = new[] {
-                "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
-                "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
-            };
+                    var csrfTokenNames = new[]
+                    {
+                        "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
+                        "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
+                    };
 
-                    // ── Build the body text for the textbox ───────────────────────
                     var bodyLines = new List<string>();
                     var tokenFields = new List<string>();
                     var userFields = new List<string>();
 
                     foreach (var kv in fields)
                     {
-                        bool isToken = csrfTokenNames.Any(t =>
-                            kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+                        bool isToken = csrfTokenNames.Any(t => kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
                         bool isHidden = kv.Key.StartsWith("__", StringComparison.Ordinal);
 
-                        if (isToken || isHidden)
-                            tokenFields.Add($"{kv.Key}={kv.Value}");
-                        else
-                            userFields.Add($"{kv.Key}=");
+                        if (isToken || isHidden) tokenFields.Add($"{kv.Key}={kv.Value}");
+                        else userFields.Add($"{kv.Key}=");
                     }
 
                     bodyLines.Add("# ── Hidden / Framework fields (auto-filled) ──");
@@ -306,9 +296,7 @@ namespace ThreatScanner
 
                         foreach (var kv in fields)
                         {
-                            bool isToken = csrfTokenNames.Any(t =>
-                                kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
-
+                            bool isToken = csrfTokenNames.Any(t => kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
                             if (isToken)
                                 Log("🔑", $"  CSRF token field: [{kv.Key}]  ({(kv.Value.Length > 0 ? $"value len={kv.Value.Length}" : "empty")})");
                             else if (kv.Key.StartsWith("__"))
@@ -319,8 +307,7 @@ namespace ThreatScanner
 
                         LogSep();
                         Log("ℹ️", "Body auto-filled in the Forge tab.");
-                        Log("ℹ️", "Fill in the user fields (username/password/etc.) then click ⚡ Send Forged Request.");
-
+                        Log("ℹ️", "Fill in the user fields then click ⚡ Send Forged Request.");
                         tabControl_Main.SelectedTab = tabPage_Forge;
                     }));
                 });
@@ -340,8 +327,6 @@ namespace ThreatScanner
         }
 
         // ─── FIND BEST FORM ───────────────────────────────────────────────────────
-        // Prefer login/auth POST forms, fall back to first POST form
-
         private Match FindBestForm(string html)
         {
             var allForms = Regex.Matches(html, @"<form[\s\S]*?</form>",
@@ -352,7 +337,7 @@ namespace ThreatScanner
             {
                 string method = ExtractAttr(m.Value, "method");
                 bool isPost = string.IsNullOrEmpty(method) ||
-                              method.Equals("post", StringComparison.OrdinalIgnoreCase);
+                                method.Equals("post", StringComparison.OrdinalIgnoreCase);
                 if (!isPost) continue;
 
                 if (firstPost == null) firstPost = m;
@@ -361,13 +346,12 @@ namespace ThreatScanner
                 if (lower.Contains("login") || lower.Contains("password") ||
                     lower.Contains("signin") || lower.Contains("username") ||
                     lower.Contains("email"))
-                    return m;   // Best match — login form
+                    return m;
             }
             return firstPost;
         }
 
         // ─── MAIN SCAN ────────────────────────────────────────────────────────────
-
         private async void button_Scan_Click(object sender, EventArgs e)
         {
             ClearOut();
@@ -410,15 +394,12 @@ namespace ThreatScanner
             }
         }
 
-        // ─── STEP 1: FETCH + COOKIE FLAGS ────────────────────────────────────────
-
         // ─── STEP 1: FETCH VIA CDP + COOKIE FLAGS ────────────────────────────────
         private async Task<string> FetchAndCheckCookies(string url)
         {
             Invoke((Action)(() => Log("🍪", "── Cookie / SameSite Analysis (CDP) ──────────────────")));
             try
             {
-                // Connect to browser instance and navigate
                 IPage page = await GetOrCreateActivePageAsync();
 
                 Invoke((Action)(() => Log("🔄", $"Navigating to {url} via CDP...")));
@@ -429,10 +410,7 @@ namespace ThreatScanner
                 });
                 await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = 30000 });
 
-                // Get page HTML structure
                 string html = await page.ContentAsync();
-
-                // Fetch cookies via the Playwright Browser Context API
                 var contextCookies = await page.Context.CookiesAsync(new[] { url });
 
                 if (contextCookies == null || contextCookies.Count == 0)
@@ -446,8 +424,6 @@ namespace ThreatScanner
                         string cookieName = cookie.Name;
                         bool hasHttpOnly = cookie.HttpOnly;
                         bool hasSecure = cookie.Secure;
-
-                        // Checking Playwright SameSite status mappings
                         string sameSiteStr = cookie.SameSite.ToString();
                         bool hasSameSiteStrict = sameSiteStr.Equals("Strict", StringComparison.OrdinalIgnoreCase);
                         bool hasSameSiteLax = sameSiteStr.Equals("Lax", StringComparison.OrdinalIgnoreCase);
@@ -456,18 +432,13 @@ namespace ThreatScanner
                         Invoke((Action)(() =>
                         {
                             Log("🍪", $"Cookie: {cookieName}");
-                            Log(hasHttpOnly ? "✅" : "⚠️",
-                                $"  HttpOnly: {(hasHttpOnly ? "Yes" : "MISSING — accessible via JavaScript")}");
-                            Log(hasSecure ? "✅" : "⚠️",
-                                $"  Secure:   {(hasSecure ? "Yes" : "MISSING — sent over plain HTTP")}");
-                            if (hasSameSiteStrict)
-                                Log("✅", "  SameSite: Strict — best CSRF protection");
-                            else if (hasSameSiteLax)
-                                Log("⚠️", "  SameSite: Lax — partial protection");
-                            else if (hasSameSiteNone)
-                                Log("🚨", "  SameSite: None — cookie sent on ALL cross-site requests (CSRF risk)");
-                            else
-                                Log("🚨", "  SameSite: NOT SET — explicit value required");
+                            Log(hasHttpOnly ? "✅" : "⚠️", $"  HttpOnly: {(hasHttpOnly ? "Yes" : "MISSING — accessible via JavaScript")}");
+                            Log(hasSecure ? "✅" : "⚠️", $"  Secure:   {(hasSecure ? "Yes" : "MISSING — sent over plain HTTP")}");
+
+                            if (hasSameSiteStrict) Log("✅", "  SameSite: Strict — best CSRF protection");
+                            else if (hasSameSiteLax) Log("⚠️", "  SameSite: Lax — partial protection");
+                            else if (hasSameSiteNone) Log("🚨", "  SameSite: None — cookie sent on ALL cross-site requests (CSRF risk)");
+                            else Log("🚨", "  SameSite: NOT SET — explicit value required");
                             LogSep();
                         }));
                     }
@@ -482,7 +453,6 @@ namespace ThreatScanner
         }
 
         // ─── STEP 2: FORM CSRF TOKEN CHECK ───────────────────────────────────────
-
         private void CheckForms(string html, string baseUrl)
         {
             Invoke((Action)(() => Log("📋", "── Form CSRF Token Analysis ────────────────────────")));
@@ -547,7 +517,6 @@ namespace ThreatScanner
         }
 
         // ─── STEP 3: CORS CHECK ───────────────────────────────────────────────────
-
         private async Task CheckCors(string url)
         {
             Invoke((Action)(() => Log("🌐", "── CORS Origin Reflection Check ────────────────────")));
@@ -589,7 +558,6 @@ namespace ThreatScanner
         }
 
         // ─── STEP 4: REFERER / ORIGIN ENFORCEMENT ────────────────────────────────
-
         private async Task CheckRefererEnforcement(string url)
         {
             Invoke((Action)(() => Log("🔗", "── Referer / Origin Header Enforcement ─────────────")));
@@ -622,7 +590,6 @@ namespace ThreatScanner
         }
 
         // ─── FORGE REQUEST ────────────────────────────────────────────────────────
-
         private async void button_ForgeRequest_Click(object sender, EventArgs e)
         {
             ClearOut();
@@ -640,7 +607,6 @@ namespace ThreatScanner
             bool omitToken = checkBox_OmitToken.Checked;
             var extraHeaders = ScanHelpers.GetEnabledGridRows(dataGridView_Headers, "col_CsrfHdrKey", "col_CsrfHdrValue");
 
-            // Parse body — skip comment lines (starting with #)
             string bodyText = textBox_ForgeBody.Text.Trim();
             var pairs = bodyText
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -650,7 +616,6 @@ namespace ThreatScanner
                 .Select(p => new KeyValuePair<string, string>(p[0].Trim(), p[1].Trim()))
                 .ToList();
 
-            // Remove CSRF token fields if checkbox is ticked
             if (omitToken)
             {
                 var csrfNames = new[] {
@@ -664,10 +629,8 @@ namespace ThreatScanner
 
             button_ForgeRequest.Enabled = false;
             SetProgress(true);
-
             Log("⚡", $"Forged {method} → {url}");
-            if (!string.IsNullOrEmpty(origin))
-                Log("ℹ️", $"Simulating cross-site request from: {origin}");
+            if (!string.IsNullOrEmpty(origin)) Log("ℹ️", $"Simulating cross-site request from: {origin}");
             if (omitToken) Log("🚨", "CSRF token deliberately OMITTED.");
             Log("📦", $"Sending {pairs.Count} field(s):");
             foreach (var kv in pairs)
@@ -706,12 +669,9 @@ namespace ThreatScanner
                                     : code >= 400 && code < 500 ? "⚠️" : "🚨";
                         Log(icon, $"HTTP {code}  {resp.ReasonPhrase}");
 
-                        if (code == 403 || code == 401)
-                            Log("✅", "Server REJECTED the forged request — CSRF protection appears active.");
-                        else if (code == 500)
-                            Log("⚠️", "Server returned 500 — likely __EVENTVALIDATION / ViewState mismatch (ASP.NET WebForms protection).");
-                        else if (code >= 200 && code < 300)
-                            Log("🚨", "Server ACCEPTED the forged cross-site request — may be CSRF vulnerable!");
+                        if (code == 403 || code == 401) Log("✅", "Server REJECTED the forged request — CSRF protection appears active.");
+                        else if (code == 500) Log("⚠️", "Server returned 500 — likely __EVENTVALIDATION / ViewState mismatch.");
+                        else if (code >= 200 && code < 300) Log("🚨", "Server ACCEPTED the forged cross-site request — may be CSRF vulnerable!");
                         else if (code >= 300 && code < 400)
                         {
                             string loc = resp.Headers.Location?.ToString() ?? "";
@@ -740,7 +700,6 @@ namespace ThreatScanner
                             }
                         }
                         else Log("📄", "(empty response body)");
-
                         LogSep();
                     }));
                 });
@@ -758,7 +717,6 @@ namespace ThreatScanner
         }
 
         // ─── GENERATE PoC HTML ────────────────────────────────────────────────────
-
         private void button_GeneratePoc_Click(object sender, EventArgs e)
         {
             string targetUrl = ScanHelpers.NormalizeUrl(textBox_ForgeUrl.Text.Trim());
@@ -818,7 +776,6 @@ namespace ThreatScanner
         }
 
         // ─── HELPERS ─────────────────────────────────────────────────────────────
-
         private static string ExtractAttr(string tag, string attr)
         {
             foreach (string q in new[] { "\"", "'" })
@@ -844,7 +801,6 @@ namespace ThreatScanner
         }
 
         // ─── SAVE / CLEAR ─────────────────────────────────────────────────────────
-
         private void button_SaveReport_Click(object sender, EventArgs e)
         {
             if (richTextBox_Output.TextLength == 0) return;
@@ -858,98 +814,5 @@ namespace ThreatScanner
         }
 
         private void button_ClearOutput_Click(object sender, EventArgs e) => ClearOut();
-
-
-
-        private void CsrfTesterForm_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            // Disconnect (but do not close) the CDP-attached Edge
-            try { _browser?.CloseAsync(); } catch { }
-            try { _playwright?.Dispose(); } catch { }
-        }
-
-        /// <summary>
-        /// Returns the live page to operate on. Connects to the
-        /// already-running Edge (via CDP) on first use and reuses the same page.
-        /// </summary>
-        private async Task<IPage> GetOrCreateActivePageAsync()
-        {
-            if (_activePage != null && !_activePage.IsClosed)
-                return _activePage;
-
-            await EnsureEdgeRunningAsync();
-
-            _playwright = await Playwright.CreateAsync();
-            _browser = await _playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
-            IBrowserContext context = _browser.Contexts[0];
-
-            IPage page = null;
-            foreach (IPage p in context.Pages)
-            {
-                if (p.Url.IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    page = p;
-                    break;
-                }
-            }
-            if (page == null)
-                page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
-
-            _activePage = page;
-            return _activePage;
-        }
-
-        private async Task EnsureEdgeRunningAsync()
-        {
-            if (await IsCdpReady()) { Log("[Edge] Already connected via CDP."); return; }
-
-            string edgePath = GetEdgePath();
-            if (edgePath == null)
-            {
-                Log("[Edge] msedge.exe not found. Launch Edge manually with --remote-debugging-port=65535", Color.OrangeRed);
-                return;
-            }
-
-            Log("[Edge] Closing existing Edge instances ...");
-            foreach (Process proc in Process.GetProcessesByName("msedge"))
-            {
-                try { proc.Kill(); proc.WaitForExit(2000); } catch { }
-            }
-            await Task.Delay(2500);
-
-            Log("[Edge] Launching Edge with remote debugging on port 65535 ...");
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = edgePath,
-                Arguments = "--remote-debugging-port=65535 --user-data-dir=\"" + EDGE_SESSION + "\" --no-first-run --no-default-browser-check",
-                UseShellExecute = true
-            });
-
-            Log("[Edge] Waiting for Edge to be ready ...", Color.Yellow);
-            for (int i = 0; i < 20; i++)
-            {
-                await Task.Delay(1000);
-                if (await IsCdpReady()) { Log("[Edge] Ready!", Color.LightGreen); return; }
-            }
-            Log("[Edge] Edge did not respond in time - trying anyway.", Color.OrangeRed);
-        }
-        private static async Task<bool> IsCdpReady()
-        {
-            try
-            {
-                using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
-                {
-                    HttpResponseMessage res = await CdpHttpClient.GetAsync(CDP_ENDPOINT + "/json/version", cts.Token);
-                    return res.IsSuccessStatusCode;
-                }
-            }
-            catch { return false; }
-        }
-        private static string GetEdgePath()
-        {
-            if (File.Exists(EDGE_PATH_X86)) return EDGE_PATH_X86;
-            if (File.Exists(EDGE_PATH_X64)) return EDGE_PATH_X64;
-            return null;
-        }
     }
 }

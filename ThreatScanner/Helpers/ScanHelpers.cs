@@ -23,7 +23,7 @@ namespace ThreatScanner.Helpers
             return raw;
         }
 
-        // ─── OUTPUT LOGGING ──────────────────────────────────────────────────────
+        // ─── OUTPUT LOGGING (ListBox) ─────────────────────────────────────────────
 
         public static void Log(ListBox output, string icon, string message)
         {
@@ -157,11 +157,9 @@ namespace ThreatScanner.Helpers
             grid.KeyDown += (s, e) =>
             {
                 if (e.KeyCode != System.Windows.Forms.Keys.Delete) return;
-                // Collect row indices to remove (skip the new-row placeholder)
                 var toRemove = new System.Collections.Generic.List<int>();
                 foreach (DataGridViewRow row in grid.SelectedRows)
                     if (!row.IsNewRow) toRemove.Add(row.Index);
-                // Also handle cell-level selection (no full row selected)
                 if (toRemove.Count == 0)
                 {
                     var rowSet = new System.Collections.Generic.HashSet<int>();
@@ -169,14 +167,13 @@ namespace ThreatScanner.Helpers
                         if (!grid.Rows[cell.RowIndex].IsNewRow) rowSet.Add(cell.RowIndex);
                     toRemove.AddRange(rowSet);
                 }
-                // Remove highest index first to keep indices stable
                 toRemove.Sort((a, b) => b.CompareTo(a));
                 foreach (int idx in toRemove) grid.Rows.RemoveAt(idx);
                 e.Handled = true;
             };
         }
 
-        // ─── RICHTEXTBOX OUTPUT ───────────────────────────────────────────────────
+        // ─── RICHTEXTBOX COLORS ───────────────────────────────────────────────────
 
         private static readonly System.Drawing.Color ColOk = System.Drawing.Color.FromArgb(78, 201, 176);
         private static readonly System.Drawing.Color ColWarn = System.Drawing.Color.FromArgb(255, 198, 64);
@@ -191,10 +188,12 @@ namespace ThreatScanner.Helpers
             icon == "🚨" || icon == "❌" ? ColError :
             icon == "→" ? ColInfo :
             icon == "" ? ColSep :
-                                         ColDefault;
+                                       ColDefault;
+
+        // ─── RICHTEXTBOX OUTPUT (icon-based) ─────────────────────────────────────
 
         /// <summary>
-        /// Appends a coloured line to a RichTextBox output panel.
+        /// Appends a coloured line to a RichTextBox using icon-derived colour.
         /// Thread-safe: marshals to the UI thread via Invoke when needed.
         /// </summary>
         public static void LogRtb(System.Windows.Forms.RichTextBox rtb, string icon, string message)
@@ -224,5 +223,52 @@ namespace ThreatScanner.Helpers
             if (rtb.InvokeRequired) rtb.Invoke((Action)(() => rtb.Clear()));
             else rtb.Clear();
         }
+
+        // ─── RICHTEXTBOX OUTPUT (explicit colour) ─────────────────────────────────
+
+        /// <summary>
+        /// Appends a timestamped line to a RichTextBox with an explicit colour.
+        /// Used by forms (AutoFillForm, CsrfTesterForm) that write
+        ///   "[HH:mm:ss]  message"  with a caller-supplied highlight colour.
+        /// Passing <c>null</c> for <paramref name="color"/> falls back to the
+        /// default text colour (RGB 212, 212, 212).
+        /// Thread-safe via Invoke.
+        /// </summary>
+        public static void LogRtbColor(
+            System.Windows.Forms.RichTextBox rtb,
+            string message,
+            System.Drawing.Color? color = null)
+        {
+            void Append()
+            {
+                rtb.SelectionStart = rtb.TextLength;
+                rtb.SelectionLength = 0;
+                rtb.SelectionColor = color ?? ColDefault;
+                rtb.AppendText($"[{DateTime.Now:HH:mm:ss}]  {message}{Environment.NewLine}");
+                rtb.SelectionColor = ColDefault;
+                rtb.ScrollToCaret();
+            }
+
+            if (rtb.InvokeRequired) rtb.Invoke((Action)Append);
+            else Append();
+        }
+
+        // ─── HTML STRIP HELPER (used by queue-based forms) ────────────────────────
+
+        /// <summary>
+        /// Strips HTML tags from <paramref name="message"/> and returns the
+        /// plain-text result.  Used by BruteForceForm (and any future queue-based
+        /// form) so the stripping logic lives in one place.
+        /// </summary>
+        public static string StripHtmlTags(string message)
+            => System.Text.RegularExpressions.Regex.Replace(message, "<.*?>", string.Empty);
+
+        /// <summary>
+        /// Formats a queue-entry string the same way BruteForceForm's
+        /// FlushPendingRows writes to the ListBox: "{icon}  {message}" (trimmed).
+        /// Centralises the format so every queue-based form uses identical output.
+        /// </summary>
+        public static string FormatQueueRow(string icon, string message)
+            => $"{icon}  {message}".TrimStart();
     }
 }

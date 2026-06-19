@@ -52,17 +52,12 @@ namespace ThreatScanner
             => _pendingRows.Enqueue(new PendingRow(icon, msg));
 
         /// <summary>
-        /// Queues an HTML-stripped log line (delegates stripping to ScanHelpers).
-        /// Safe to call from any thread.
+        /// Queues an HTML-stripped log line. Safe to call from any thread.
+        /// Stripping is delegated to ScanHelpers.StripHtmlTags so the logic
+        /// stays in one place.
         /// </summary>
         private void HtmlLog(string icon, string msg)
-        {
-            // Strip HTML tags before queuing so the worker doesn't need to
-            // touch the UI; ScanHelpers.HtmlLog normally does this plus an
-            // Invoke — we replicate only the stripping part here.
-            string stripped = System.Text.RegularExpressions.Regex.Replace(msg, "<.*?>", string.Empty);
-            _pendingRows.Enqueue(new PendingRow(icon, stripped));
-        }
+            => _pendingRows.Enqueue(new PendingRow(icon, ScanHelpers.StripHtmlTags(msg)));
 
         private void LogSep() => Log("", new string('─', 60));
 
@@ -86,7 +81,7 @@ namespace ThreatScanner
             try
             {
                 while (_pendingRows.TryDequeue(out var pr))
-                    listBox_Output.Items.Add($"{pr.Icon}  {pr.Message}".TrimStart());
+                    listBox_Output.Items.Add(ScanHelpers.FormatQueueRow(pr.Icon, pr.Message));
 
                 // Cap list size so a long fuzz run can't bloat memory/repaint cost.
                 int overflow = listBox_Output.Items.Count - MaxRows;

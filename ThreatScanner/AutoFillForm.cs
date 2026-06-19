@@ -1,4 +1,11 @@
-﻿using Microsoft.Playwright;
+﻿// ═══════════════════════════════════════════════════════════════════════════
+//  AutoFillForm.cs  — CDP session managed by CdpHelper
+//  Replace only the CDP-related fields, constructor wiring, FormClosing,
+//  GetOrCreateActivePageAsync, EnsureEdgeRunningAsync, IsCdpReady, and
+//  GetEdgePath.  All other methods (DetectFieldsAsync, FillAutoDetected,
+//  FillFrameFromGrid, FillFrameDynamic, …) stay exactly as they were.
+// ═══════════════════════════════════════════════════════════════════════════
+using Microsoft.Playwright;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,17 +16,13 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ThreatScanner.Helpers;          // ← CdpHelper lives here
 
 namespace ThreatScanner
 {
     public partial class AutoFillForm : Form
     {
-        // ── Constants ─────────────────────────────────────────────────────────
-        private const string CDP_ENDPOINT = "http://localhost:65535";
-        private const string EDGE_PATH_X86 = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
-        private const string EDGE_PATH_X64 = @"C:\Program Files\Microsoft\Edge\Application\msedge.exe";
-        private const string EDGE_SESSION = @"C:\EdgeSession";
-
+        // ── Constants (non-CDP ones kept here) ────────────────────────────────
         private const int DELAY_MIN = 60;
         private const int DELAY_MAX = 180;
 
@@ -35,17 +38,20 @@ namespace ThreatScanner
         private static readonly string[] Companies = { "Zion Corp", "Apex Solutions", "Nova Systems", "Sigma Group", "Orion Tech" };
         private static readonly string[] Departments = { "Engineering", "Finance", "HR", "Operations", "IT", "Marketing" };
 
-        private static readonly HttpClient CdpHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        // ── CDP — now ONE field instead of three ──────────────────────────────
+        // REMOVED: _playwright, _browser, _activePage
+        // REPLACED BY:
+        private CdpHelper _cdp;
+
+        // Shortcut: the page the Detect step navigated to, cached so Fill can
+        // reuse it without re-navigating (WebForms regenerates control IDs).
+        private IPage _activePage => _cdp != null
+            ? _cdp.GetOrCreateActivePageAsync().GetAwaiter().GetResult()
+            : null;
 
         private CancellationTokenSource _cts;
         private bool _running = false;
         private bool _fieldsDetected = false;
-
-        // Persistent browser session shared between Detect (Step 2) and Fill (Step 3)
-        // so we never re-navigate and never lose WebForms-generated control IDs.
-        private IPlaywright _playwright;
-        private IBrowser _browser;
-        private IPage _activePage;
 
         // ── Constructor ───────────────────────────────────────────────────────
         public AutoFillForm()
@@ -53,21 +59,37 @@ namespace ThreatScanner
             InitializeComponent();
             textBox_TargetUrl.Text = "";
             ApplyOutputTheme();
-            // Step 3 is locked until Step 2 (Detect) has run
             button_FillForm.Enabled = false;
+
+            // Wire up CdpHelper with our own Log callback
+            _cdp = new CdpHelper((msg, isError) =>
+                Log(msg, isError ? Color.OrangeRed : (Color?)null));
+
             this.FormClosing += AutoFillForm_FormClosing;
         }
 
         private void AutoFillForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // Disconnect (but do not close) the CDP-attached Edge — the user's
-            // session/window should keep living outside this tool.
-            try { _browser?.CloseAsync(); } catch { }
-            try { _playwright?.Dispose(); } catch { }
+            // Disconnect from Edge (does NOT close the browser window)
+            _cdp?.Dispose();
         }
 
         // =========================================================================
-        //  UI EVENT HANDLERS
+        //  GetOrCreateActivePageAsync — now delegates to CdpHelper
+        // =========================================================================
+        private Task<IPage> GetOrCreateActivePageAsync() =>
+            _cdp.GetOrCreateActivePageAsync();
+
+        // =========================================================================
+        //  EnsureEdgeRunningAsync / IsCdpReady / GetEdgePath
+        //  — DELETED from this class; CdpHelper owns them entirely.
+        //    If you need to reference CDP_ENDPOINT elsewhere in this file, use:
+        //    CdpHelper.CDP_ENDPOINT
+        // =========================================================================
+
+
+        // =========================================================================
+        //  UI EVENT HANDLERS  (unchanged — shown here for completeness)
         // =========================================================================
 
         private async void button_DetectFields_Click(object sender, EventArgs e)
@@ -127,11 +149,9 @@ namespace ThreatScanner
             Log(string.Format("[Fill] Starting {0} on {1} ...", dryRun ? "DRY RUN" : "LIVE RUN", url));
 
             _cts = new CancellationTokenSource();
-
             try
             {
                 await FillAutoDetected(url, dryRun, delayMs, _cts.Token);
-
                 Log("[Fill] Done.", Color.LightGreen);
             }
             catch (OperationCanceledException)
@@ -162,19 +182,18 @@ namespace ThreatScanner
             }
         }
 
-        private void button_ClearOutput_Click(object sender, EventArgs e)
-        {
+        private void button_ClearOutput_Click(object sender, EventArgs e) =>
             richTextBox_Output.Clear();
-        }
+
 
         // =========================================================================
-        //  CORE LOGIC — DETECT  (with diagnostic logging)
+        //  CORE LOGIC — DETECT  (unchanged)
         // =========================================================================
 
         private async Task<List<FieldInfo>> DetectFieldsAsync(string url, bool headless)
         {
             if (headless)
-                Log("[Detect] Note: this tool now attaches to your real Edge session via CDP, so the page will be visible regardless of 'Run headless'. Log in there first if needed.", Color.Yellow);
+                Log("[Detect] Note: this tool attaches to your real Edge session via CDP, so the page will be visible regardless of 'Run headless'. Log in there first if needed.", Color.Yellow);
 
             List<FieldInfo> results = new List<FieldInfo>();
 
@@ -194,7 +213,6 @@ namespace ThreatScanner
                 Log(string.Format("[Detect] WARNING: requested {0} but landed on {1} — log in first, then re-run Detect.", url, page.Url), Color.OrangeRed);
             }
 
-            // DIAG: how many frames does Playwright actually see?
             Log(string.Format("[Detect][DIAG] page.Frames count = {0}", page.Frames.Count), Color.Cyan);
 
             int frameIndex = -1;
@@ -202,20 +220,14 @@ namespace ThreatScanner
             {
                 frameIndex++;
 
-                // DIAG: how many <form> tags exist in this frame's DOM right now,
-                // and what are their id/name attributes (helps spot nested/duplicate forms).
-                // NOTE: we return a single JSON string and parse it ourselves —
-                // asking Playwright's EvaluateAsync<T> to deserialize directly into
-                // List<string> is unreliable and can throw a NullReferenceException
-                // deep inside EvaluateArgumentValueConverter on some payloads.
                 string formDescriptorsJson = "[]";
                 try
                 {
                     formDescriptorsJson = await frame.EvaluateAsync<string>(@"
-                   () => JSON.stringify(Array.from(document.forms).map((f, i) =>
-                       [`#${i}`, `id=${f.id||''}`, `name=${f.name||''}`, `action=${f.action||''}`, `elements=${f.elements.length}`].join(' ')
-                   ))
-               ");
+                        () => JSON.stringify(Array.from(document.forms).map((f, i) =>
+                            [`#${i}`, `id=${f.id||''}`, `name=${f.name||''}`, `action=${f.action||''}`, `elements=${f.elements.length}`].join(' ')
+                        ))
+                    ");
                 }
                 catch (Exception evalEx)
                 {
@@ -223,29 +235,19 @@ namespace ThreatScanner
                 }
 
                 List<string> formDescriptors = new List<string>();
-                try
-                {
-                    formDescriptors = JsonSerializer.Deserialize<List<string>>(formDescriptorsJson) ?? new List<string>();
-                }
-                catch
-                {
-                    // If parsing fails for any reason, fall back to showing the raw payload rather than crashing.
-                    formDescriptors = new List<string> { "(raw) " + formDescriptorsJson };
-                }
+                try { formDescriptors = JsonSerializer.Deserialize<List<string>>(formDescriptorsJson) ?? new List<string>(); }
+                catch { formDescriptors = new List<string> { "(raw) " + formDescriptorsJson }; }
 
                 Log(string.Format("[Detect][DIAG] frame[{0}] url='{1}' isDetached={2} <form> count={3}",
                     frameIndex, frame.Url, frame.IsDetached, formDescriptors.Count), Color.Cyan);
                 foreach (string fd in formDescriptors)
                     Log("[Detect][DIAG]    form " + fd, Color.Cyan);
 
-                IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync(
-                    "input:not([type='hidden']):not([type='submit']):not([type='button'])" +
-                    ":not([type='reset']):not([type='image']):not([type='file']), textarea");
+                IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='file']), textarea");
                 IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
                 IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
                 IReadOnlyList<IElementHandle> radios = await frame.QuerySelectorAllAsync("input[type='radio']");
 
-                // DIAG: raw counts before visibility filtering
                 Log(string.Format("[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4}",
                     frameIndex, inputs.Count, selects.Count, checkboxes.Count, radios.Count), Color.Cyan);
 
@@ -265,38 +267,23 @@ namespace ThreatScanner
                     string label = await GetLabelText(frame, id);
                     string hint = (name + " " + id + " " + ph + " " + label).ToLowerInvariant();
 
-                    // DIAG: which <form> (by index) does this element actually belong to in the live DOM?
                     string ownerForm = "(eval failed)";
                     try
                     {
                         ownerForm = await el.EvaluateAsync<string>(@"
-                       el => {
-                           const f = el.closest('form');
-                           if (!f) return '(none)';
-                           const all = Array.from(document.forms);
-                           return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
-                       }
-                   ");
+                            el => {
+                                const f = el.closest('form');
+                                if (!f) return '(none)';
+                                const all = Array.from(document.forms);
+                                return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
+                            }
+                        ");
                     }
-                    catch (Exception ownerEx)
-                    {
-                        ownerForm = "(eval failed: " + ownerEx.Message + ")";
-                    }
+                    catch (Exception ownerEx) { ownerForm = "(eval failed: " + ownerEx.Message + ")"; }
 
                     kept++;
-                    Log(string.Format("[Detect][DIAG]    + input name='{0}' id='{1}' type='{2}' ownerForm={3}",
-                        name, id, type, ownerForm), Color.Gray);
-
-                    results.Add(new FieldInfo
-                    {
-                        Tag = "input",
-                        Name = name,
-                        Id = id,
-                        Type = type,
-                        Label = label,
-                        Selector = BuildSelector(name, id),
-                        SuggestedValue = InferTextValue(hint, type)
-                    });
+                    Log(string.Format("[Detect][DIAG]    + input name='{0}' id='{1}' type='{2}' ownerForm={3}", name, id, type, ownerForm), Color.Gray);
+                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = type, Label = label, Selector = BuildSelector(name, id), SuggestedValue = InferTextValue(hint, type) });
                 }
 
                 foreach (IElementHandle el in selects)
@@ -310,30 +297,18 @@ namespace ThreatScanner
                     try
                     {
                         ownerForm = await el.EvaluateAsync<string>(@"
-                       el => {
-                           const f = el.closest('form');
-                           if (!f) return '(none)';
-                           const all = Array.from(document.forms);
-                           return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
-                       }
-                   ");
+                            el => {
+                                const f = el.closest('form');
+                                if (!f) return '(none)';
+                                const all = Array.from(document.forms);
+                                return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
+                            }
+                        ");
                     }
-                    catch (Exception ownerEx)
-                    {
-                        ownerForm = "(eval failed: " + ownerEx.Message + ")";
-                    }
-                    Log(string.Format("[Detect][DIAG]    + select name='{0}' id='{1}' ownerForm={2}", name, id, ownerForm), Color.Gray);
+                    catch (Exception ownerEx) { ownerForm = "(eval failed: " + ownerEx.Message + ")"; }
 
-                    results.Add(new FieldInfo
-                    {
-                        Tag = "select",
-                        Name = name,
-                        Id = id,
-                        Type = "select",
-                        Label = label,
-                        Selector = BuildSelector(name, id),
-                        SuggestedValue = "(first valid option)"
-                    });
+                    Log(string.Format("[Detect][DIAG]    + select name='{0}' id='{1}' ownerForm={2}", name, id, ownerForm), Color.Gray);
+                    results.Add(new FieldInfo { Tag = "select", Name = name, Id = id, Type = "select", Label = label, Selector = BuildSelector(name, id), SuggestedValue = "(first valid option)" });
                 }
 
                 foreach (IElementHandle el in checkboxes)
@@ -341,16 +316,7 @@ namespace ThreatScanner
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
-                    results.Add(new FieldInfo
-                    {
-                        Tag = "input",
-                        Name = name,
-                        Id = id,
-                        Type = "checkbox",
-                        Label = "",
-                        Selector = BuildSelector(name, id),
-                        SuggestedValue = "true"
-                    });
+                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "checkbox", Label = "", Selector = BuildSelector(name, id), SuggestedValue = "true" });
                 }
 
                 foreach (IElementHandle el in radios)
@@ -358,26 +324,13 @@ namespace ThreatScanner
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
-                    results.Add(new FieldInfo
-                    {
-                        Tag = "input",
-                        Name = name,
-                        Id = id,
-                        Type = "radio",
-                        Label = "",
-                        Selector = BuildSelector(name, id),
-                        SuggestedValue = "(first)"
-                    });
+                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "radio", Label = "", Selector = BuildSelector(name, id), SuggestedValue = "(first)" });
                 }
 
-                // DIAG: summary for this frame
                 Log(string.Format("[Detect][DIAG] frame[{0}] visible-input summary -> kept={1} skippedInvisible={2} skippedDisabled={3}",
                     frameIndex, kept, skippedInvisible, skippedDisabled), Color.Cyan);
             }
 
-            // DIAG: final tally, and a duplicate-selector check (this is what breaks Fill
-            // even when Detect "found" everything — two fields mapping to the same selector
-            // means Fill will only ever hit the first one).
             Log(string.Format("[Detect][DIAG] TOTAL fields collected = {0}", results.Count), Color.Cyan);
             Dictionary<string, int> selectorCounts = new Dictionary<string, int>();
             foreach (FieldInfo fi in results)
@@ -388,54 +341,17 @@ namespace ThreatScanner
             foreach (KeyValuePair<string, int> kv in selectorCounts)
             {
                 if (kv.Value > 1)
-                    Log(string.Format("[Detect][DIAG] !! DUPLICATE selector '{0}' used by {1} fields — Fill will likely only hit one of them.", kv.Key, kv.Value), Color.OrangeRed);
+                    Log(string.Format("[Detect][DIAG] !! DUPLICATE selector '{0}' used by {1} fields.", kv.Key, kv.Value), Color.OrangeRed);
             }
 
-            // NOTE: we deliberately do NOT close the browser/page here.
-            // Step 3 (Fill) reuses this exact same page so the selectors
-            // captured above stay valid (WebForms regenerates control IDs
-            // on every fresh render, so a second navigation would break them).
             return results;
         }
 
-        /// <summary>
-        /// Returns the live page Detect/Fill should both operate on. Connects to the
-        /// already-running Edge (via CDP) on first use and reuses the same page for
-        /// every subsequent call within this form's lifetime.
-        /// </summary>
-        private async Task<IPage> GetOrCreateActivePageAsync()
-        {
-            if (_activePage != null && !_activePage.IsClosed)
-                return _activePage;
-
-            await EnsureEdgeRunningAsync();
-
-            _playwright = await Playwright.CreateAsync();
-            _browser = await _playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
-            IBrowserContext context = _browser.Contexts[0];
-
-            IPage page = null;
-            foreach (IPage p in context.Pages)
-            {
-                if (p.Url.IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    page = p;
-                    break;
-                }
-            }
-            if (page == null)
-                page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
-
-            _activePage = page;
-            return _activePage;
-        }
-
         // =========================================================================
-        //  CORE LOGIC — FILL (AUTO DETECT tab)
+        //  CORE LOGIC — FILL (AUTO DETECT tab)  (unchanged)
         // =========================================================================
         private async Task FillAutoDetected(string url, bool dryRun, int delayMs, CancellationToken ct)
         {
-            // Build the list of fields the user left checked in the grid
             List<FieldInfo> selectedFields = new List<FieldInfo>();
             foreach (DataGridViewRow row in dataGridView_Detected.Rows)
             {
@@ -459,7 +375,6 @@ namespace ThreatScanner
                 return;
             }
 
-            // Dry run: just echo what would happen, no browser needed
             if (dryRun)
             {
                 foreach (FieldInfo f in selectedFields)
@@ -467,16 +382,13 @@ namespace ThreatScanner
                 return;
             }
 
-            // Live run: reuse the SAME page Detect already opened — do NOT navigate.
-            // Re-navigating an ASP.NET WebForms page regenerates ctl_XXXXX IDs and/or
-            // can bounce through a login redirect, which is exactly what broke fill.
-            if (_activePage == null || _activePage.IsClosed)
+            IPage page = await GetOrCreateActivePageAsync();
+            if (page == null || page.IsClosed)
             {
-                Log("[Fill] No active page from Detect found. Run 'Detect Fields' first, then Start Fill.", Color.OrangeRed);
+                Log("[Fill] No active page from Detect found. Run 'Detect Fields' first.", Color.OrangeRed);
                 return;
             }
 
-            IPage page = _activePage;
             Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)", page.Url, page.Frames.Count, selectedFields.Count));
 
             HashSet<FieldInfo> handled = new HashSet<FieldInfo>();
@@ -485,40 +397,34 @@ namespace ThreatScanner
 
             int missed = selectedFields.Count - handled.Count;
             if (missed > 0)
-                Log(string.Format("[Fill] {0} selected field(s) were not found on the page (the DOM may have changed since Detect ran — re-run Detect).", missed), Color.OrangeRed);
+                Log(string.Format("[Fill] {0} selected field(s) were not found on the page (re-run Detect if the DOM changed).", missed), Color.OrangeRed);
         }
 
-
         // =========================================================================
-        //  GRID-DRIVEN FRAME FILLER  (respects checkbox selection from Step 2)
+        //  GRID-DRIVEN FRAME FILLER  (unchanged)
         // =========================================================================
         private async Task FillFrameFromGrid(IFrame frame, IPage page, List<FieldInfo> selectedFields, HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
         {
             foreach (FieldInfo f in selectedFields)
             {
                 ct.ThrowIfCancellationRequested();
-                if (handled.Contains(f)) continue;
-                if (string.IsNullOrEmpty(f.Selector)) continue;
+                if (handled.Contains(f) || string.IsNullOrEmpty(f.Selector)) continue;
 
                 IElementHandle el;
-                try
-                {
-                    el = await frame.QuerySelectorAsync(f.Selector);
-                }
+                try { el = await frame.QuerySelectorAsync(f.Selector); }
                 catch (Exception ex)
                 {
                     Log(string.Format("  SKIP   [{0}] invalid selector: {1}", f.Selector, ex.Message), Color.OrangeRed);
                     continue;
                 }
-
-                if (el == null) continue; // not in this frame — try the next one
+                if (el == null) continue;
 
                 bool visible = await el.IsVisibleAsync();
                 bool enabled = await el.IsEnabledAsync();
                 if (!visible || !enabled)
                 {
                     Log(string.Format("  SKIP   [{0}] visible={1} enabled={2}", f.Selector, visible, enabled), Color.OrangeRed);
-                    handled.Add(f); // found it, just can't act on it — don't recount as "missing"
+                    handled.Add(f);
                     continue;
                 }
 
@@ -541,7 +447,6 @@ namespace ThreatScanner
                 }
                 else if (type == "select")
                 {
-                    // pick first valid option if value is the placeholder text
                     string val = f.SuggestedValue;
                     if (string.IsNullOrEmpty(val) || val == "(first valid option)")
                     {
@@ -561,13 +466,8 @@ namespace ThreatScanner
                 }
                 else
                 {
-                    // text / email / password / date / number / textarea …
                     string value = f.SuggestedValue;
-                    if (string.IsNullOrEmpty(value))
-                    {
-                        handled.Add(f);
-                        continue;
-                    }
+                    if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
 
                     await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
                     await Task.Delay(60);
@@ -586,16 +486,12 @@ namespace ThreatScanner
             }
         }
 
-
         // =========================================================================
-        //  DYNAMIC FRAME FILLER
+        //  DYNAMIC FRAME FILLER  (unchanged)
         // =========================================================================
         private async Task FillFrameDynamic(IFrame frame, IPage page, int delayMs, CancellationToken ct)
         {
-            IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync(
-                "input:not([type='hidden']):not([type='submit']):not([type='button'])" +
-                ":not([type='reset']):not([type='image']):not([type='checkbox'])" +
-                ":not([type='radio']):not([type='file']), textarea");
+            IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea");
             IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
             IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
             IReadOnlyList<IElementHandle> radios = await frame.QuerySelectorAllAsync("input[type='radio']");
@@ -604,7 +500,6 @@ namespace ThreatScanner
 
             Log(string.Format("[Frame] {0}  |  {1} inputs, {2} selects", frame.Url, inputs.Count, selects.Count));
 
-            // ── Text inputs ──────────────────────────────────────────────────
             foreach (IElementHandle el in inputs)
             {
                 ct.ThrowIfCancellationRequested();
@@ -624,7 +519,6 @@ namespace ThreatScanner
                 await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
                 await Task.Delay(60);
                 await page.Keyboard.PressAsync("Delete");
-
                 foreach (char c in value)
                 {
                     await page.Keyboard.TypeAsync(c.ToString());
@@ -635,7 +529,6 @@ namespace ThreatScanner
                 await Task.Delay(delayMs);
             }
 
-            // ── Selects ──────────────────────────────────────────────────────
             foreach (IElementHandle el in selects)
             {
                 ct.ThrowIfCancellationRequested();
@@ -652,8 +545,7 @@ namespace ThreatScanner
                 {
                     string v = await opt.GetAttributeAsync("value") ?? "";
                     string t = (await opt.InnerTextAsync()).Trim();
-                    if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1")
-                        valid.Add(new string[] { v, t });
+                    if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1") valid.Add(new string[] { v, t });
                 }
                 if (valid.Count == 0) continue;
 
@@ -665,7 +557,6 @@ namespace ThreatScanner
                 await Task.Delay(delayMs);
             }
 
-            // ── Checkboxes ───────────────────────────────────────────────────
             HashSet<string> checkedGroups = new HashSet<string>();
             foreach (IElementHandle el in checkboxes)
             {
@@ -679,7 +570,6 @@ namespace ThreatScanner
                 await Task.Delay(delayMs);
             }
 
-            // ── Radios ───────────────────────────────────────────────────────
             HashSet<string> radioGroups = new HashSet<string>();
             foreach (IElementHandle el in radios)
             {
@@ -696,56 +586,8 @@ namespace ThreatScanner
         }
 
         // =========================================================================
-        //  HELPERS
+        //  STATIC HELPERS  (unchanged)
         // =========================================================================
-        private async Task EnsureEdgeRunningAsync()
-        {
-            if (await IsCdpReady()) { Log("[Edge] Already connected via CDP."); return; }
-
-            string edgePath = GetEdgePath();
-            if (edgePath == null)
-            {
-                Log("[Edge] msedge.exe not found. Launch Edge manually with --remote-debugging-port=65535", Color.OrangeRed);
-                return;
-            }
-
-            Log("[Edge] Closing existing Edge instances ...");
-            foreach (Process proc in Process.GetProcessesByName("msedge"))
-            {
-                try { proc.Kill(); proc.WaitForExit(2000); } catch { }
-            }
-            await Task.Delay(2500);
-
-            Log("[Edge] Launching Edge with remote debugging on port 65535 ...");
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = edgePath,
-                Arguments = "--remote-debugging-port=65535 --user-data-dir=\"" + EDGE_SESSION + "\" --no-first-run --no-default-browser-check",
-                UseShellExecute = true
-            });
-
-            Log("[Edge] Waiting for Edge to be ready ...", Color.Yellow);
-            for (int i = 0; i < 20; i++)
-            {
-                await Task.Delay(1000);
-                if (await IsCdpReady()) { Log("[Edge] Ready!", Color.LightGreen); return; }
-            }
-            Log("[Edge] Edge did not respond in time - trying anyway.", Color.OrangeRed);
-        }
-
-        private static async Task<bool> IsCdpReady()
-        {
-            try
-            {
-                using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
-                {
-                    HttpResponseMessage res = await CdpHttpClient.GetAsync(CDP_ENDPOINT + "/json/version", cts.Token);
-                    return res.IsSuccessStatusCode;
-                }
-            }
-            catch { return false; }
-        }
-
         private static async Task<string> GetLabelText(IFrame frame, string fieldId)
         {
             if (string.IsNullOrEmpty(fieldId)) return "";
@@ -767,48 +609,27 @@ namespace ThreatScanner
 
         private static string InferTextValue(string hint, string type)
         {
-            if (type == "password" || hint.Contains("pass"))
-                return string.Format("Pass{0}!A", Rng.Next(1000, 9999));
-            if (type == "email" || hint.Contains("email") || hint.Contains("mail"))
-                return string.Format("{0}{1}@{2}", Pick(FirstNames).ToLower(), Rng.Next(10, 999), Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
-            if (hint.Contains("phone") || hint.Contains("mobile") || hint.Contains("tel") || hint.Contains("cel"))
-                return string.Format("09{0}", Rng.Next(100000000, 999999999));
-            if (hint.Contains("user") || hint.Contains("login"))
-                return string.Format("{0}.{1}{2}", Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
-            if (hint.Contains("first") || hint.Contains("fname") || hint.Contains("given"))
-                return Pick(FirstNames);
-            if (hint.Contains("middle") || hint.Contains("mname"))
-                return Pick(MiddleNames);
-            if (hint.Contains("last") || hint.Contains("lname") || hint.Contains("surname"))
-                return Pick(LastNames);
-            if (hint.Contains("suffix"))
-                return Pick(new[] { "Jr.", "Sr.", "III" });
-            if (hint.Contains("fullname") || hint.Contains("full_name") || hint.Contains("full name"))
-                return string.Format("{0} {1}", Pick(FirstNames), Pick(LastNames));
-            if (hint.Contains("position") || hint.Contains("title") || hint.Contains("designation"))
-                return Pick(Positions);
-            if (hint.Contains("department") || hint.Contains("dept"))
-                return Pick(Departments);
-            if (hint.Contains("company") || hint.Contains("organization") || hint.Contains("org"))
-                return Pick(Companies);
-            if (hint.Contains("address") || hint.Contains("street"))
-                return string.Format("{0} {1}", Rng.Next(1, 999), Pick(Streets));
-            if (hint.Contains("city") || hint.Contains("municipality"))
-                return Pick(Cities);
-            if (hint.Contains("zip") || hint.Contains("postal"))
-                return Rng.Next(1000, 9999).ToString();
-            if (hint.Contains("age"))
-                return Rng.Next(18, 65).ToString();
-            if (type == "date" || hint.Contains("date") || hint.Contains("birth") || hint.Contains("dob"))
-                return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2000), Rng.Next(1, 12), Rng.Next(1, 28));
-            if (type == "number" || hint.Contains("amount") || hint.Contains("qty"))
-                return Rng.Next(1, 100).ToString();
-            if (type == "url" || hint.Contains("url") || hint.Contains("website"))
-                return "https://example.com";
-            if (hint.Contains("note") || hint.Contains("remark") || hint.Contains("comment") || hint.Contains("description"))
-                return "Auto-generated entry for testing purposes.";
-            if (type == "text" || type == "search" || string.IsNullOrEmpty(type))
-                return string.Format("Value{0}", Rng.Next(100, 999));
+            if (type == "password" || hint.Contains("pass")) return string.Format("Pass{0}!A", Rng.Next(1000, 9999));
+            if (type == "email" || hint.Contains("email") || hint.Contains("mail")) return string.Format("{0}{1}@{2}", Pick(FirstNames).ToLower(), Rng.Next(10, 999), Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
+            if (hint.Contains("phone") || hint.Contains("mobile") || hint.Contains("tel") || hint.Contains("cel")) return string.Format("09{0}", Rng.Next(100000000, 999999999));
+            if (hint.Contains("user") || hint.Contains("login")) return string.Format("{0}.{1}{2}", Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
+            if (hint.Contains("first") || hint.Contains("fname") || hint.Contains("given")) return Pick(FirstNames);
+            if (hint.Contains("middle") || hint.Contains("mname")) return Pick(MiddleNames);
+            if (hint.Contains("last") || hint.Contains("lname") || hint.Contains("surname")) return Pick(LastNames);
+            if (hint.Contains("suffix")) return Pick(new[] { "Jr.", "Sr.", "III" });
+            if (hint.Contains("fullname") || hint.Contains("full_name") || hint.Contains("full name")) return string.Format("{0} {1}", Pick(FirstNames), Pick(LastNames));
+            if (hint.Contains("position") || hint.Contains("title") || hint.Contains("designation")) return Pick(Positions);
+            if (hint.Contains("department") || hint.Contains("dept")) return Pick(Departments);
+            if (hint.Contains("company") || hint.Contains("organization") || hint.Contains("org")) return Pick(Companies);
+            if (hint.Contains("address") || hint.Contains("street")) return string.Format("{0} {1}", Rng.Next(1, 999), Pick(Streets));
+            if (hint.Contains("city") || hint.Contains("municipality")) return Pick(Cities);
+            if (hint.Contains("zip") || hint.Contains("postal")) return Rng.Next(1000, 9999).ToString();
+            if (hint.Contains("age")) return Rng.Next(18, 65).ToString();
+            if (type == "date" || hint.Contains("date") || hint.Contains("birth") || hint.Contains("dob")) return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2000), Rng.Next(1, 12), Rng.Next(1, 28));
+            if (type == "number" || hint.Contains("amount") || hint.Contains("qty")) return Rng.Next(1, 100).ToString();
+            if (type == "url" || hint.Contains("url") || hint.Contains("website")) return "https://example.com";
+            if (hint.Contains("note") || hint.Contains("remark") || hint.Contains("comment") || hint.Contains("description")) return "Auto-generated entry for testing purposes.";
+            if (type == "text" || type == "search" || string.IsNullOrEmpty(type)) return string.Format("Value{0}", Rng.Next(100, 999));
             return null;
         }
 
@@ -833,38 +654,18 @@ namespace ThreatScanner
             return options[Rng.Next(options.Count)][0];
         }
 
-        private static string GetEdgePath()
-        {
-            if (File.Exists(EDGE_PATH_X86)) return EDGE_PATH_X86;
-            if (File.Exists(EDGE_PATH_X64)) return EDGE_PATH_X64;
-            return null;
-        }
-
         // ── UI helpers ────────────────────────────────────────────────────────
         private void SetRunning(bool running)
         {
             _running = running;
             progressBar_Scan.Style = running ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
             button_DetectFields.Enabled = !running;
-            // Fill (Step 3) only enabled when not running AND fields have been detected
             button_FillForm.Enabled = !running && _fieldsDetected;
             button_FillForm.Text = running ? "Running..." : "▶  Start Fill";
         }
 
         private void Log(string message, Color? color = null)
-        {
-            if (richTextBox_Output.InvokeRequired)
-            {
-                richTextBox_Output.Invoke(new Action<string, Color?>(Log), message, color);
-                return;
-            }
-
-            richTextBox_Output.SelectionStart = richTextBox_Output.TextLength;
-            richTextBox_Output.SelectionLength = 0;
-            richTextBox_Output.SelectionColor = color.HasValue ? color.Value : Color.FromArgb(212, 212, 212);
-            richTextBox_Output.AppendText(string.Format("[{0:HH:mm:ss}]  {1}\r\n", DateTime.Now, message));
-            richTextBox_Output.ScrollToCaret();
-        }
+            => ScanHelpers.LogRtbColor(richTextBox_Output, message, color);
 
         private void ApplyOutputTheme()
         {
@@ -872,12 +673,8 @@ namespace ThreatScanner
             richTextBox_Output.ForeColor = Color.FromArgb(212, 212, 212);
         }
 
-        private static T Pick<T>(T[] arr) { return arr[Rng.Next(arr.Length)]; }
-
-        private static string Truncate(string s, int max)
-        {
-            return s.Length <= max ? s : s.Substring(0, max) + "...";
-        }
+        private static T Pick<T>(T[] arr) => arr[Rng.Next(arr.Length)];
+        private static string Truncate(string s, int max) => s.Length <= max ? s : s.Substring(0, max) + "...";
 
         // ─── FieldInfo DTO ────────────────────────────────────────────────────
         private class FieldInfo
