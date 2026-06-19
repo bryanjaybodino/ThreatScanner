@@ -43,5 +43,10 @@ namespace ThreatScanner
         {
             new AutoFillForm().Show();
         }
+
+        private void button_OpenSubdomainScanner_Click(object sender, EventArgs e)
+        {
+            new SubdomainScannerForm().Show();
+        }
     }
 }

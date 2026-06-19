@@ -30,6 +30,8 @@
             this.label_CsrfDesc = new System.Windows.Forms.Label();
             this.button_OpenAutoFill = new System.Windows.Forms.Button();
             this.label_AutoFillDesc = new System.Windows.Forms.Label();
+            this.button_OpenSubdomainScanner = new System.Windows.Forms.Button();
+            this.label_SubdomainDesc = new System.Windows.Forms.Label();
             this.label_Disclaimer = new System.Windows.Forms.Label();
             this.panel_TopBar.SuspendLayout();
             this.panel_Cards.SuspendLayout();
@@ -83,6 +85,8 @@
             this.panel_Cards.Controls.Add(this.label_CsrfDesc);
             this.panel_Cards.Controls.Add(this.button_OpenAutoFill);
             this.panel_Cards.Controls.Add(this.label_AutoFillDesc);
+            this.panel_Cards.Controls.Add(this.button_OpenSubdomainScanner);
+            this.panel_Cards.Controls.Add(this.label_SubdomainDesc);
             this.panel_Cards.Controls.Add(this.label_Disclaimer);
             this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_Cards.Location = new System.Drawing.Point(0, 80);
@@ -265,6 +269,35 @@
             this.label_AutoFillDesc.Text = "Automatically populate form fields\nwith test data sets";
             this.label_AutoFillDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
+            // button_OpenSubdomainScanner
+            // 
+            this.button_OpenSubdomainScanner.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.button_OpenSubdomainScanner.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.button_OpenSubdomainScanner.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button_OpenSubdomainScanner.FlatAppearance.BorderSize = 0;
+            this.button_OpenSubdomainScanner.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_OpenSubdomainScanner.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this.button_OpenSubdomainScanner.ForeColor = System.Drawing.Color.White;
+            this.button_OpenSubdomainScanner.Location = new System.Drawing.Point(750, 240);
+            this.button_OpenSubdomainScanner.Name = "button_OpenSubdomainScanner";
+            this.button_OpenSubdomainScanner.Size = new System.Drawing.Size(330, 100);
+            this.button_OpenSubdomainScanner.TabIndex = 12;
+            this.button_OpenSubdomainScanner.Text = "🌐  Subdomain Scanner";
+            this.button_OpenSubdomainScanner.UseVisualStyleBackColor = false;
+            this.button_OpenSubdomainScanner.Click += new System.EventHandler(this.button_OpenSubdomainScanner_Click);
+            // 
+            // label_SubdomainDesc
+            // 
+            this.label_SubdomainDesc.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.label_SubdomainDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label_SubdomainDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label_SubdomainDesc.Location = new System.Drawing.Point(750, 350);
+            this.label_SubdomainDesc.Name = "label_SubdomainDesc";
+            this.label_SubdomainDesc.Size = new System.Drawing.Size(330, 50);
+            this.label_SubdomainDesc.TabIndex = 13;
+            this.label_SubdomainDesc.Text = "Discover subdomains via CT logs, then probe each one live";
+            this.label_SubdomainDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // label_Disclaimer
             // 
             this.label_Disclaimer.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -273,7 +306,7 @@
             this.label_Disclaimer.Location = new System.Drawing.Point(0, 432);
             this.label_Disclaimer.Name = "label_Disclaimer";
             this.label_Disclaimer.Size = new System.Drawing.Size(1482, 28);
-            this.label_Disclaimer.TabIndex = 12;
+            this.label_Disclaimer.TabIndex = 14;
             this.label_Disclaimer.Text = "⚠️  For authorized penetration testing only. Unauthorized use is illegal.";
             this.label_Disclaimer.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
@@ -315,6 +348,8 @@
         private System.Windows.Forms.Label label_WsDesc;
         private System.Windows.Forms.Label label_CsrfDesc;
         private System.Windows.Forms.Label label_AutoFillDesc;
+        private System.Windows.Forms.Button button_OpenSubdomainScanner;
+        private System.Windows.Forms.Label label_SubdomainDesc;
         private System.Windows.Forms.Label label_Disclaimer;
     }
 }
