@@ -529,41 +529,52 @@ namespace ThreatScanner
         private async Task CheckSensitiveFiles(string baseUrl, CancellationToken ct)
         {
             AddSep("Sensitive File / Admin Panel Discovery");
-            string authority = new Uri(baseUrl.TrimEnd('/')).GetLeftPart(UriPartial.Authority);
 
-            foreach (string path in SensitivePaths)
+            List<string> scanBases = await GetScanBasesAsync(baseUrl, ct);
+
+            foreach (var b in scanBases)
+                AddRow("Scan Base", "ℹ️ Target", b);
+
+            var triedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string authority in scanBases)
             {
                 if (ct.IsCancellationRequested) break;
-                string target = authority + path;
-                try
+
+                foreach (string path in SensitivePaths)
                 {
-                    var resp = await _http.GetAsync(target, ct);
-                    int code = (int)resp.StatusCode;
-                    string body = await resp.Content.ReadAsStringAsync();
-                    long bodyLen = body.Length;
-                    string detail = $"HTTP {code}  [{bodyLen} bytes]";
+                    if (ct.IsCancellationRequested) break;
 
-                    // ── Soft-404 suppression (200s only, never 403/401/5xx) ───
-                    // Only skip if code==200 AND the body is byte-for-byte the
-                    // same as the canary 404 page we fetched at baseline time.
-                    if (code == 200 && IsSoft404(body, bodyLen))
-                        continue;  // genuine soft-404 — skip silently
+                    string target = authority + path;
+                    if (!triedTargets.Add(target)) continue;
 
-                    string status;
-                    if (code == 200) status = "🚨 Found (200)";
-                    else if (code == 403) status = "⚠️ Forbidden (403)";
-                    else if (code == 401) status = "⚠️ Auth Required (401)";
-                    else if (code == 301 || code == 302) status = $"↪️ Redirect ({code})";
-                    else if (code == 500) status = "⚠️ Server Error (500)";
-                    else if (code == 404) status = "✅ Not found (404)";
-                    else status = $"ℹ️ HTTP {code}";
+                    try
+                    {
+                        var resp = await _http.GetAsync(target, ct);
+                        int code = (int)resp.StatusCode;
+                        string body = await resp.Content.ReadAsStringAsync();
+                        long bodyLen = body.Length;
+                        string detail = $"HTTP {code}  [{bodyLen} bytes]";
 
-                    AddRow(path, status, detail);
-                }
-                catch (OperationCanceledException) { break; }
-                catch (Exception ex)
-                {
-                    AddRow(path, "✅ Not reachable", ex.Message);
+                        if (code == 200 && IsSoft404(body, bodyLen))
+                            continue;
+
+                        string status;
+                        if (code == 200) status = "🚨 Found (200)";
+                        else if (code == 403) status = "⚠️ Forbidden (403)";
+                        else if (code == 401) status = "⚠️ Auth Required (401)";
+                        else if (code == 301 || code == 302) status = $"↪️ Redirect ({code})";
+                        else if (code == 500) status = "⚠️ Server Error (500)";
+                        else if (code == 404) status = "✅ Not found (404)";
+                        else status = $"ℹ️ HTTP {code}";
+
+                        AddRow(target, status, detail);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex)
+                    {
+                        AddRow(target, "✅ Not reachable", ex.Message);
+                    }
                 }
             }
         }
@@ -906,6 +917,93 @@ namespace ThreatScanner
                 });
 
             menu.Show(dataGridView_Output, e.Location);
+        }
+
+
+
+        /// <summary>
+        /// Given a target URL, returns every "base" URL that sensitive-file paths
+        /// should be appended to: the root authority AND every parent folder
+        /// walking up from the full path.
+        ///
+        /// e.g. http://localhost:81/ERP/Seller-Login.aspx
+        ///   -> http://localhost:81
+        ///   -> http://localhost:81/ERP
+        ///
+        /// e.g. http://localhost:81/ERP/Sub/Page.aspx
+        ///   -> http://localhost:81
+        ///   -> http://localhost:81/ERP
+        ///   -> http://localhost:81/ERP/Sub
+        /// </summary>
+        private async Task<List<string>> GetScanBasesAsync(string url, CancellationToken ct)
+        {
+            var bases = new List<string>();
+            var uri = new Uri(url);
+
+            string authority = uri.GetLeftPart(UriPartial.Authority);
+            bases.Add(authority);
+
+            string path = uri.AbsolutePath;
+            var segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+
+            var sb = new StringBuilder();
+            for (int i = 0; i < segments.Length; i++)
+            {
+                string seg = segments[i];
+
+                // Explicit extension anywhere in the segment => definitely a file.
+                // Stop walking deeper — nothing after a file can be a real folder.
+                if (seg.Contains("."))
+                    break;
+
+                sb.Append('/').Append(seg);
+                string candidateUrl = authority + sb.ToString();
+
+                // Ambiguous extensionless segment — ask the server which it is.
+                bool isFile = await IsActuallyAFileAsync(candidateUrl, ct);
+                if (isFile)
+                {
+                    AddRow("Path Check", "ℹ️ Detected as FILE",
+                        $"{candidateUrl} — extensionless file route, not scanning as folder");
+                    break; // stop walking — nothing under a file is a real subfolder
+                }
+
+                bases.Add(candidateUrl);
+            }
+
+            return bases;
+        }
+        /// <summary>
+        /// Probes whether a given path segment is actually a FILE (e.g. an
+        /// extensionless ASP.NET route) as opposed to a real FOLDER.
+        ///
+        /// IMPORTANT: a soft-404 mismatch alone is NOT reliable evidence of
+        /// "file" — different folders on the same server can legitimately
+        /// produce different 404 styles (IIS static handler vs custom error
+        /// page) depending on routing config. We only call something a FILE
+        /// when we get a strong, unambiguous signal: a 500-class error, since
+        /// that's what ASP.NET typically throws when you try to route "under"
+        /// a compiled page/handler that isn't a directory.
+        /// Default assumption is FOLDER.
+        /// </summary>
+        private async Task<bool> IsActuallyAFileAsync(string segmentUrl, CancellationToken ct)
+        {
+            try
+            {
+                string canaryChild = segmentUrl.TrimEnd('/') + "/__ts_canary_" + Guid.NewGuid().ToString("N");
+                var resp = await _http.GetAsync(canaryChild, ct);
+                int code = (int)resp.StatusCode;
+
+                // Only a server-error response under the segment is strong
+                // enough evidence that it's a file masquerading as a folder.
+                // 404s of any flavor are NOT evidence — too many legitimate
+                // reasons a folder's 404 can differ from the root's.
+                return code == 500;
+            }
+            catch
+            {
+                return false; // probe failed — default to folder, don't lose coverage
+            }
         }
     }
 }
