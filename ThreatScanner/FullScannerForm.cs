@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -15,7 +16,7 @@ using ThreatScanner.Helpers;
 namespace ThreatScanner
 {
     /// <summary>
-    ///   full scanner:
+    ///   Full scanner:
     ///   - Sensitive file / admin panel discovery (extended wordlist)
     ///   - Hyperlink + JS link crawling (configurable depth)
     ///   - Security headers, cookies, SQLi hints, XSS hints, open ports, DNS
@@ -29,13 +30,123 @@ namespace ThreatScanner
         private readonly HashSet<string> _visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource _cts;
 
-        // ── Soft-404 baseline (fingerprint of the server's custom 404 page) ─────
-        // We fetch a guaranteed-nonexistent URL first, record its body length and
-        // a 256-char snippet so we can detect exact soft-404 duplicates.
+        // ── Soft-404 baseline ────────────────────────────────────────────────────
         private long _soft404Size = -1;
-        private string _soft404Snippet = null;  // first 256 chars of the baseline body
+        private string _soft404Snippet = null;
 
-        public FullScannerForm() => InitializeComponent();
+        // ── UI batching ──────────────────────────────────────────────────────────
+        // Worker threads (scan loop, crawler, port scan…) produce rows far faster
+        // than WinForms can paint them. Instead of one Invoke + one repaint per row,
+        // we drop PendingRow structs into a thread-safe queue and drain them all in
+        // one SuspendLayout/ResumeLayout pass on a 75 ms timer — exactly the same
+        // pattern used in WebSocketForm. This turns N marshals + N repaints into
+        // ~13 marshals/sec + ~13 repaints/sec regardless of scan throughput.
+        private readonly ConcurrentQueue<PendingRow> _pendingRows = new ConcurrentQueue<PendingRow>();
+        private readonly System.Windows.Forms.Timer _flushTimer = new System.Windows.Forms.Timer { Interval = 75 };
+        private const int MaxRows = 10_000; // cap for very long scans
+
+        private readonly struct PendingRow
+        {
+            public readonly string Name, Status, Response;
+            public PendingRow(string name, string status, string response)
+            { Name = name; Status = status; Response = response; }
+        }
+
+        public FullScannerForm()
+        {
+            InitializeComponent();
+
+            // Suppress per-cell auto-resize while batch-inserting rows.
+            dataGridView_Output.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+
+            _flushTimer.Tick += (s, e) => FlushPendingRows();
+            _flushTimer.Start();
+            this.FormClosed += (s, e) => _flushTimer.Stop();
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        //  QUEUE-BASED GRID LOGGING
+        // ════════════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Queues one grid row. Safe to call from any thread — never marshals to
+        /// the UI thread directly; the flush timer handles that in bulk.
+        /// Replaces the old AddRow(InvokeRequired) pattern entirely.
+        /// </summary>
+        private void AddRow(string name, string status, string response)
+            => _pendingRows.Enqueue(new PendingRow(name, status, response));
+
+        private void AddSep(string section)
+            => AddRow($"── {section} ──", "────", new string('─', 40));
+
+        /// <summary>
+        /// Drains the pending-row queue and inserts all of them into the
+        /// DataGridView in a single SuspendLayout/ResumeLayout batch.
+        /// Runs on the UI thread only (called from Timer.Tick).
+        /// </summary>
+        private void FlushPendingRows()
+        {
+            if (_pendingRows.IsEmpty) return;
+
+            // Remember if the user was already at the bottom so we don't yank
+            // them away from rows they are reading mid-scan.
+            bool wasAtBottom = dataGridView_Output.Rows.Count == 0
+                || (dataGridView_Output.FirstDisplayedScrollingRowIndex >= 0
+                    && dataGridView_Output.FirstDisplayedScrollingRowIndex
+                       + dataGridView_Output.DisplayedRowCount(false)
+                       >= dataGridView_Output.Rows.Count - 2);
+
+            dataGridView_Output.SuspendLayout();
+            int lastIdx = -1;
+            try
+            {
+                while (_pendingRows.TryDequeue(out var pr))
+                    lastIdx = InsertRow(pr.Name, pr.Status, pr.Response);
+
+                // Trim from the front to keep memory and repaint cost bounded.
+                int overflow = dataGridView_Output.Rows.Count - MaxRows;
+                if (overflow > 0)
+                {
+                    for (int i = 0; i < overflow; i++)
+                        dataGridView_Output.Rows.RemoveAt(0);
+                    lastIdx = dataGridView_Output.Rows.Count - 1;
+                }
+            }
+            finally
+            {
+                dataGridView_Output.ResumeLayout(performLayout: true);
+            }
+
+            if (wasAtBottom && lastIdx >= 0)
+                dataGridView_Output.FirstDisplayedScrollingRowIndex = lastIdx;
+        }
+
+        /// <summary>
+        /// Actual single-row insert with colour coding. UI-thread only,
+        /// called exclusively from FlushPendingRows().
+        /// </summary>
+        private int InsertRow(string name, string status, string response)
+        {
+            int idx = dataGridView_Output.Rows.Add(name, status, response);
+            var row = dataGridView_Output.Rows[idx];
+
+            Color fore = Color.FromArgb(226, 232, 240);
+            Color back = Color.FromArgb(15, 23, 42);
+
+            if (status.StartsWith("🚨") || status.StartsWith("❌"))
+                fore = Color.FromArgb(248, 113, 113);
+            else if (status.StartsWith("⚠️"))
+                fore = Color.FromArgb(251, 191, 36);
+            else if (status.StartsWith("✅"))
+                fore = Color.FromArgb(52, 211, 153);
+            else if (status.StartsWith("ℹ️"))
+                fore = Color.FromArgb(96, 165, 250);
+
+            row.Cells["colStatus"].Style.ForeColor = fore;
+            row.Cells["colStatus"].Style.BackColor = back;
+
+            return idx;
+        }
 
         // ════════════════════════════════════════════════════════════════════════
         //  HELPERS
@@ -49,42 +160,12 @@ namespace ThreatScanner
             if (!running) progressBar_Scan.Value = 0;
         }
 
-        /// <summary>Add a row to the DataGridView (thread-safe).</summary>
-        private void AddRow(string name, string status, string response)
+        private void ClearGrid()
         {
-            void Do()
-            {
-                int idx = dataGridView_Output.Rows.Add(name, status, response);
-                var row = dataGridView_Output.Rows[idx];
-
-                // Colour the Status cell
-                Color fore = Color.FromArgb(226, 232, 240);
-                Color back = Color.FromArgb(15, 23, 42);
-
-                if (status.StartsWith("🚨") || status.StartsWith("❌"))
-                { fore = Color.FromArgb(248, 113, 113); }
-                else if (status.StartsWith("⚠️"))
-                { fore = Color.FromArgb(251, 191, 36); }
-                else if (status.StartsWith("✅"))
-                { fore = Color.FromArgb(52, 211, 153); }
-                else if (status.StartsWith("ℹ️"))
-                { fore = Color.FromArgb(96, 165, 250); }
-
-                row.Cells["colStatus"].Style.ForeColor = fore;
-                row.Cells["colStatus"].Style.BackColor = back;
-
-                // Auto-scroll
-                dataGridView_Output.FirstDisplayedScrollingRowIndex = idx;
-            }
-
-            if (dataGridView_Output.InvokeRequired)
-                dataGridView_Output.Invoke((Action)Do);
-            else
-                Do();
+            // Drain the queue first so stale rows don't reappear after a clear.
+            while (_pendingRows.TryDequeue(out _)) { }
+            dataGridView_Output.Rows.Clear();
         }
-
-        private void AddSep(string section)
-            => AddRow($"── {section} ──", "────", "────────────────────────────────────────");
 
         // ════════════════════════════════════════════════════════════════════════
         //  TAB: FULL SCAN
@@ -99,7 +180,7 @@ namespace ThreatScanner
                 return;
             }
 
-            dataGridView_Output.Rows.Clear();
+            ClearGrid();
             _visited.Clear();
             _soft404Size = -1;
             _soft404Snippet = null;
@@ -118,29 +199,17 @@ namespace ThreatScanner
                 {
                     var ct = _cts.Token;
 
-                    // 1. Basic checks on root
                     await CheckHttps(url);
                     await CheckSecurityHeaders(url);
                     await CheckCookieFlags(url);
                     await CheckRedirects(url);
                     await CheckSqlInjectionHints(url);
-
-                    // SQLi probe against any <form> fields on the page
                     await ProbeForms(url, ct);
-
                     await CheckXssHints(url);
-
-                    // XSS probe against any <form> fields on the page
                     await ProbeFormsXss(url, ct);
                     await CheckOpenPorts(url);
-
-                    // Establish soft-404 baseline BEFORE sensitive file scan
                     await BuildSoft404Baseline(url);
-
-                    // 2. Sensitive file / admin panel discovery
                     await CheckSensitiveFiles(url, ct);
-
-                    // 3. Crawl hyperlinks + JS-embedded links (depth ≤ 2)
                     await CrawlAndScan(url, depth: 0, maxDepth: 2, ct: ct);
 
                 }, _cts.Token);
@@ -155,6 +224,8 @@ namespace ThreatScanner
             }
             finally
             {
+                // Only the button/progress state changes need a direct Invoke —
+                // log rows themselves go through the queue as always.
                 Invoke((Action)(() =>
                 {
                     AddRow("DONE", "✅ Complete", $"Total URLs scanned: {_visited.Count}");
@@ -173,6 +244,7 @@ namespace ThreatScanner
 
         // ════════════════════════════════════════════════════════════════════════
         //  INDIVIDUAL CHECKS
+        //  All AddRow() calls below are thread-safe — no Invoke needed.
         // ════════════════════════════════════════════════════════════════════════
 
         private Task CheckHttps(string url)
@@ -193,14 +265,14 @@ namespace ThreatScanner
 
                 var checks = new[]
                 {
-                    ("Content-Security-Policy",  "Prevents XSS / data injection"),
-                    ("X-Frame-Options",           "Prevents clickjacking"),
-                    ("X-Content-Type-Options",    "Prevents MIME sniffing"),
-                    ("Strict-Transport-Security", "Forces HTTPS"),
-                    ("Referrer-Policy",           "Controls referrer leakage"),
-                    ("Permissions-Policy",        "Restricts browser features"),
-                    ("Cross-Origin-Opener-Policy","Isolates browsing context"),
-                    ("Cross-Origin-Resource-Policy","Restricts cross-origin reads"),
+                    ("Content-Security-Policy",        "Prevents XSS / data injection"),
+                    ("X-Frame-Options",                "Prevents clickjacking"),
+                    ("X-Content-Type-Options",         "Prevents MIME sniffing"),
+                    ("Strict-Transport-Security",      "Forces HTTPS"),
+                    ("Referrer-Policy",                "Controls referrer leakage"),
+                    ("Permissions-Policy",             "Restricts browser features"),
+                    ("Cross-Origin-Opener-Policy",     "Isolates browsing context"),
+                    ("Cross-Origin-Resource-Policy",   "Restricts cross-origin reads"),
                 };
 
                 foreach (var (header, desc) in checks)
@@ -212,14 +284,12 @@ namespace ThreatScanner
                         found ? val : $"{desc} — header not set");
                 }
 
-                // Server header leakage
                 if (headers.Contains("Server"))
                     AddRow("Server Header", "⚠️ Exposed",
                         string.Join(", ", headers.GetValues("Server")));
                 else
                     AddRow("Server Header", "✅ Hidden", "Not disclosed");
 
-                // X-Powered-By leakage
                 if (headers.Contains("X-Powered-By"))
                     AddRow("X-Powered-By", "⚠️ Exposed",
                         string.Join(", ", headers.GetValues("X-Powered-By")));
@@ -247,8 +317,7 @@ namespace ThreatScanner
                     bool sameSite = cookie.IndexOf("SameSite", StringComparison.OrdinalIgnoreCase) >= 0;
                     string name = cookie.Split(';')[0];
                     string flags = $"HttpOnly:{(httpOnly ? "✔" : "✖")}  Secure:{(secure ? "✔" : "✖")}  SameSite:{(sameSite ? "✔" : "✖")}";
-                    string icon = (httpOnly && secure) ? "✅ OK" : "⚠️ Weak flags";
-                    AddRow(name, icon, flags);
+                    AddRow(name, (httpOnly && secure) ? "✅ OK" : "⚠️ Weak flags", flags);
                 }
             }
             catch (Exception ex) { AddRow("Cookies", "❌ Error", ex.Message); }
@@ -279,17 +348,6 @@ namespace ThreatScanner
         private async Task CheckXssHints(string url)
             => await XssHelper.ProbeUrlParamAsync(_http, url, "q", AddRow);
 
-        // ════════════════════════════════════════════════════════════════════════
-        //  SQLI / XSS PROBE: HTML FORMS ON THE PAGE
-        //
-        //  Delegates to the shared SqlInjectionHelper / XssHelper so the
-        //  detection logic lives in one place (also used by SqlInjectionForm).
-        //  Same passive, single-request checks as the URL-param hints above,
-        //  but applied to each <form> discovered on the page. One request per
-        //  field — no payload chaining, no blind/time-based confirmation, no
-        //  data extraction, no WAF/filter bypass.
-        // ════════════════════════════════════════════════════════════════════════
-
         private async Task ProbeForms(string url, CancellationToken ct)
         {
             AddSep("Form SQLi Probe");
@@ -313,60 +371,12 @@ namespace ThreatScanner
             {
                 string host = new Uri(url).Host;
                 int[] ports = {
-                    // Web servers / HTTP(S)
-                    80,    // HTTP
-                    443,   // HTTPS
-                    3000,  // Common dev server (React, Node/Express, etc.)
-                    3001,  // Alternate dev server
-                    4200,  // Angular CLI default
-                    5173,  // Vite default
-                    8080,  // Alternate HTTP / Tomcat / common proxy
-                    8443,  // Alternate HTTPS
-                    8888,  // Jupyter Notebook / alternate HTTP
-                    9000,  // PHP-FPM / common app port
-
-                    // Databases
-                    1433,  // Microsoft SQL Server
-                    1521,  // Oracle DB
-                    3306,  // MySQL / MariaDB
-                    5432,  // PostgreSQL
-                    6379,  // Redis
-                    7000,  // Cassandra (inter-node)
-                    7199,  // Cassandra (JMX)
-                    9042,  // Cassandra (CQL)
-                    27017, // MongoDB
-                    27018, // MongoDB shard
-                    27019, // MongoDB config server
-
-                    // Search / messaging / streaming
-                    2181,  // Zookeeper
-                    5672,  // RabbitMQ
-                    9092,  // Kafka
-                    9200,  // Elasticsearch (HTTP)
-                    9300,  // Elasticsearch (transport)
-                    15672, // RabbitMQ management UI
-
-                    // Remote access / file transfer
-                    21,    // FTP
-                    22,    // SSH / SFTP
-                    23,    // Telnet
-                    25,    // SMTP
-                    110,   // POP3
-                    143,   // IMAP
-
-                    // Containers / orchestration
-                    2375,  // Docker (unencrypted API)
-                    2376,  // Docker (TLS API)
-                    6443,  // Kubernetes API server
-                    10250, // Kubelet API
-
-                    // Misc dev tools
-                    389,   // LDAP
-                    5000,  // Flask default / Docker registry
-                    5601,  // Kibana
-                    8081,  // Alternate HTTP / Nexus / Kafka REST proxy
-                    9090,  // Prometheus
-                    3000   // Grafana (duplicate of above note, often reused)
+                    80, 443, 3000, 3001, 4200, 5173, 8080, 8443, 8888, 9000,
+                    1433, 1521, 3306, 5432, 6379, 7000, 7199, 9042, 27017, 27018, 27019,
+                    2181, 5672, 9092, 9200, 9300, 15672,
+                    21, 22, 23, 25, 110, 143,
+                    2375, 2376, 6443, 10250,
+                    389, 5000, 5601, 8081, 9090, 3000
                 };
                 foreach (int port in ports)
                 {
@@ -385,7 +395,7 @@ namespace ThreatScanner
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        //  SENSITIVE FILE DISCOVERY (extended wordlist)
+        //  SENSITIVE FILE DISCOVERY
         // ════════════════════════════════════════════════════════════════════════
 
         private static readonly string[] SensitivePaths =
@@ -538,18 +548,13 @@ namespace ThreatScanner
             "/upload", "/upload/", "/uploads", "/uploads/", "/files", "/files/", "/file", "/media", "/media/", "/static", "/static/", "/assets", "/assets/", "/private", "/private/", "/secret", "/secret/", "/hidden", "/hidden/", "/internal", "/internal/", "/restricted", "/restricted/", "/secure", "/secure/", "/old", "/old/", "/temp", "/temp/", "/tmp", "/tmp/", "/test", "/test/", "/tests", "/tests/", "/dev", "/dev/", "/development", "/development/", "/staging", "/staging/", "/beta", "/beta/", "/alpha", "/alpha/", "/demo", "/demo/", "/preview", "/preview/", "/sandbox", "/sandbox/", "/debug", "/debug/", "/dump", "/dump/", "/export", "/export/", "/reports", "/reports/", "/report", "/report/", "/stats", "/stats/", "/statistics", "/statistics/", "/metrics", "/monitor", "/monitoring", "/monitoring/", "/tools", "/tools/", "/util", "/util/", "/utils", "/utils/", "/scripts", "/scripts/", "/shell", "/shell/", "/cmd", "/exec", "/run", "/cgi-bin", "/cgi-bin/", "/cgi-bin/printenv", "/cgi-bin/test-cgi", "/cgi-bin/admin.cgi", "/cgi-bin/php.cgi", "/cgi-bin/php5.cgi", "/.well-known/change-password",
         };
 
-        // ── Soft-404 baseline builder ────────────────────────────────────────────
-        /// <summary>
-        /// Fetches a guaranteed-nonexistent random path to capture the server's
-        /// custom 404 page fingerprint (body size + first-512-char snippet).
-        /// Any subsequent 200 that matches this fingerprint is a soft-404 false alarm.
-        /// </summary>
+        // ── Soft-404 baseline ────────────────────────────────────────────────────
+
         private async Task BuildSoft404Baseline(string baseUrl)
         {
             try
             {
                 string authority = new Uri(baseUrl.TrimEnd('/')).GetLeftPart(UriPartial.Authority);
-                // Random path that will never exist on any server
                 string canary = authority + "/ts_canary_" + Guid.NewGuid().ToString("N");
                 var resp = await _http.GetAsync(canary);
                 string body = await resp.Content.ReadAsStringAsync();
@@ -561,34 +566,16 @@ namespace ThreatScanner
             }
             catch
             {
-                // If baseline fails, we still run the scan — just without soft-404 filtering
                 AddRow("Soft-404 Baseline", "⚠️ Skipped", "Could not fetch baseline — soft-404 filter disabled");
             }
         }
 
-        /// <summary>
-        /// Returns true ONLY when a 200 response is essentially byte-for-byte
-        /// identical to the server's custom 404 page.
-        /// Uses two strict checks (never fuzzy size alone):
-        ///   1. Exact body-length match AND first-256-char snippet match.
-        ///   2. Full body string equality (for small pages).
-        /// 403 / 401 / 500 are NEVER suppressed — they are always shown.
-        /// </summary>
         private bool IsSoft404(string body, long bodyLength)
         {
-            if (_soft404Snippet == null) return false;   // no baseline — don't suppress anything
-
-            // Must be the same size (exact, no tolerance)
+            if (_soft404Snippet == null) return false;
             if (bodyLength != _soft404Size) return false;
-
-            // Additionally the first 256 chars must match exactly
-            // (catches servers that inject a tiny dynamic nonce into the page
-            //  without changing the length — extremely rare in practice)
             string snippet256 = body.Length >= 256 ? body.Substring(0, 256) : body;
-            string baseline256 = _soft404Snippet.Length >= 256
-                ? _soft404Snippet.Substring(0, 256)
-                : _soft404Snippet;
-
+            string baseline256 = _soft404Snippet.Length >= 256 ? _soft404Snippet.Substring(0, 256) : _soft404Snippet;
             return string.Equals(snippet256, baseline256, StringComparison.Ordinal);
         }
 
@@ -597,7 +584,6 @@ namespace ThreatScanner
             AddSep("Sensitive File / Admin Panel Discovery");
 
             List<string> scanBases = await GetScanBasesAsync(baseUrl, ct);
-
             foreach (var b in scanBases)
                 AddRow("Scan Base", "ℹ️ Target", b);
 
@@ -620,10 +606,8 @@ namespace ThreatScanner
                         int code = (int)resp.StatusCode;
                         string body = await resp.Content.ReadAsStringAsync();
                         long bodyLen = body.Length;
-                        string detail = $"HTTP {code}  [{bodyLen} bytes]";
 
-                        if (code == 200 && IsSoft404(body, bodyLen))
-                            continue;
+                        if (code == 200 && IsSoft404(body, bodyLen)) continue;
 
                         string status;
                         if (code == 200) status = "🚨 Found (200)";
@@ -634,19 +618,16 @@ namespace ThreatScanner
                         else if (code == 404) status = "✅ Not found (404)";
                         else status = $"ℹ️ HTTP {code}";
 
-                        AddRow(target, status, detail);
+                        AddRow(target, status, $"HTTP {code}  [{bodyLen} bytes]");
                     }
                     catch (OperationCanceledException) { break; }
-                    catch (Exception ex)
-                    {
-                        AddRow(target, "✅ Not reachable", ex.Message);
-                    }
+                    catch (Exception ex) { AddRow(target, "✅ Not reachable", ex.Message); }
                 }
             }
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        //  CRAWLER: HTML hyperlinks + JS-embedded URLs
+        //  CRAWLER
         // ════════════════════════════════════════════════════════════════════════
 
         private async Task CrawlAndScan(string url, int depth, int maxDepth, CancellationToken ct)
@@ -662,28 +643,18 @@ namespace ThreatScanner
             {
                 var resp = await _http.GetAsync(url, ct);
                 int code = (int)resp.StatusCode;
-                string ctype = resp.Content.Headers.ContentType?.MediaType ?? "";
+                string ct2 = resp.Content.Headers.ContentType?.MediaType ?? "";
 
-                // Only crawl HTML pages
-                if (!ctype.Contains("html") && depth > 0) return;
+                if (!ct2.Contains("html") && depth > 0) return;
 
                 html = await resp.Content.ReadAsStringAsync();
 
-                if (depth == 0)
-                {
-                    AddSep("Crawled Pages");
-                }
-
+                if (depth == 0) AddSep("Crawled Pages");
                 AddRow(url, $"ℹ️ HTTP {code}", $"Crawl depth {depth} — {html.Length} chars");
             }
             catch (OperationCanceledException) { return; }
-            catch (Exception ex)
-            {
-                AddRow(url, "❌ Error", ex.Message);
-                return;
-            }
+            catch (Exception ex) { AddRow(url, "❌ Error", ex.Message); return; }
 
-            // ── Extract links from HTML (<a href>, <link href>, <script src>, <img src>, <form action>)
             var links = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             ExtractHtmlLinks(html, url, links);
             ExtractJsLinks(html, url, links);
@@ -695,14 +666,12 @@ namespace ThreatScanner
                 if (ct.IsCancellationRequested) break;
                 if (_visited.Contains(link)) continue;
 
-                // Only follow same-origin links for deeper scanning
                 bool sameOrigin = link.StartsWith(baseAuthority, StringComparison.OrdinalIgnoreCase);
 
                 if (sameOrigin && depth < maxDepth)
                     await CrawlAndScan(link, depth + 1, maxDepth, ct);
                 else if (!_visited.Contains(link))
                 {
-                    // Just record external / JS-extracted links without crawling further
                     _visited.Add(link);
                     try
                     {
@@ -718,7 +687,8 @@ namespace ThreatScanner
             }
         }
 
-        // ── Extract <a href>, <link href>, <script src>, <form action> ──────────
+        // ── Link extraction ──────────────────────────────────────────────────────
+
         private static readonly Regex _htmlLinkRx = new Regex(
             @"(?:href|src|action)\s*=\s*[""']([^""'#>]+)[""']",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -728,40 +698,25 @@ namespace ThreatScanner
             foreach (Match m in _htmlLinkRx.Matches(html))
             {
                 string href = m.Groups[1].Value.Trim();
-                if (TryResolve(href, baseUrl, out string abs))
-                    links.Add(abs);
+                if (TryResolve(href, baseUrl, out string abs)) links.Add(abs);
             }
         }
 
-        // ── Extract URLs from inline / external JS (strings that look like paths) ─
         private static readonly Regex _jsUrlRx = new Regex(
-            @"[""'`](/[a-zA-Z0-9_/\-\.]+)[""'`]",
-            RegexOptions.Compiled);
+            @"[""'`](/[a-zA-Z0-9_/\-\.]+)[""'`]", RegexOptions.Compiled);
 
         private static void ExtractJsLinks(string html, string baseUrl, HashSet<string> links)
         {
-            // Also look inside <script> blocks
             var scriptBlocks = Regex.Matches(html, @"<script[^>]*>(.*?)</script>",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
             foreach (Match sb in scriptBlocks)
             {
-                string jsCode = sb.Groups[1].Value;
-                foreach (Match m in _jsUrlRx.Matches(jsCode))
-                {
-                    string path = m.Groups[1].Value;
-                    if (TryResolve(path, baseUrl, out string abs))
-                        links.Add(abs);
-                }
+                foreach (Match m in _jsUrlRx.Matches(sb.Groups[1].Value))
+                    if (TryResolve(m.Groups[1].Value, baseUrl, out string abs)) links.Add(abs);
             }
-
-            // Also scan <script src="..."> external JS files referenced in html
-            var scriptSrc = Regex.Matches(html, @"<script[^>]+src\s*=\s*[""']([^""']+)[""']",
-                RegexOptions.IgnoreCase);
-            foreach (Match m in scriptSrc)
-            {
-                if (TryResolve(m.Groups[1].Value.Trim(), baseUrl, out string abs))
-                    links.Add(abs);
-            }
+            foreach (Match m in Regex.Matches(html, @"<script[^>]+src\s*=\s*[""']([^""']+)[""']",
+                RegexOptions.IgnoreCase))
+                if (TryResolve(m.Groups[1].Value.Trim(), baseUrl, out string abs)) links.Add(abs);
         }
 
         private static bool TryResolve(string href, string baseUrl, out string abs)
@@ -773,7 +728,6 @@ namespace ThreatScanner
             try
             {
                 abs = new Uri(new Uri(baseUrl), href).ToString();
-                // Remove fragment
                 int frag = abs.IndexOf('#');
                 if (frag >= 0) abs = abs.Substring(0, frag);
                 return abs.StartsWith("http://") || abs.StartsWith("https://");
@@ -787,7 +741,7 @@ namespace ThreatScanner
 
         private async void button_AnalyzeHeaders_Click(object sender, EventArgs e)
         {
-            dataGridView_Output.Rows.Clear();
+            ClearGrid();
             string url = NormalizeUrl(textBox_Url.Text);
             button_AnalyzeHeaders.Enabled = false;
             SetProgress(true);
@@ -816,7 +770,7 @@ namespace ThreatScanner
 
         private async void button_DnsLookup_Click(object sender, EventArgs e)
         {
-            dataGridView_Output.Rows.Clear();
+            ClearGrid();
             string url = NormalizeUrl(textBox_Url.Text);
             button_DnsLookup.Enabled = false;
             SetProgress(true);
@@ -876,11 +830,10 @@ namespace ThreatScanner
 
         private void button_ClearOutput_Click(object sender, EventArgs e)
         {
-            dataGridView_Output.Rows.Clear();
+            ClearGrid();
             _visited.Clear();
         }
 
-        /// <summary>Copy selected rows (or all rows) to clipboard as TSV.</summary>
         private void button_CopyOutput_Click(object sender, EventArgs e)
         {
             var sb = new StringBuilder();
@@ -902,12 +855,12 @@ namespace ThreatScanner
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        // ── Right-click context menu on the grid ─────────────────────────────────
+        // ── Right-click context menu ─────────────────────────────────────────────
+
         private void dataGridView_Output_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Right) return;
 
-            // Select the row under the cursor so the user gets visual feedback
             var hit = dataGridView_Output.HitTest(e.X, e.Y);
             if (hit.RowIndex >= 0)
             {
@@ -916,18 +869,15 @@ namespace ThreatScanner
                 dataGridView_Output.CurrentCell = dataGridView_Output.Rows[hit.RowIndex].Cells[0];
             }
 
-            // Build the URL for "Open in Browser" from the clicked row
             string rowUrl = null;
             if (hit.RowIndex >= 0)
             {
                 string nameCell = dataGridView_Output.Rows[hit.RowIndex]
                                       .Cells["colName"].Value?.ToString() ?? "";
-                // The Name column may be a full URL (crawl rows) or a path (/admin)
                 if (nameCell.StartsWith("http://") || nameCell.StartsWith("https://"))
                     rowUrl = nameCell;
                 else if (nameCell.StartsWith("/"))
                 {
-                    // Reconstruct absolute URL using the current target
                     string rawTarget = NormalizeUrl(textBox_Url.Text.Trim());
                     try
                     {
@@ -940,17 +890,13 @@ namespace ThreatScanner
 
             var menu = new ContextMenuStrip();
 
-            // ── Open in Browser ───────────────────────────────────────────────
             var openItem = new System.Windows.Forms.ToolStripMenuItem(
                 "🌐  Open in Browser", null,
                 (s, ev) =>
                 {
                     if (!string.IsNullOrEmpty(rowUrl))
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = rowUrl,
-                            UseShellExecute = true   // opens the default browser
-                        });
+                        { FileName = rowUrl, UseShellExecute = true });
                     else
                         MessageBox.Show("No valid URL found for this row.", "ThreatScanner",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -959,53 +905,31 @@ namespace ThreatScanner
             openItem.Font = new System.Drawing.Font(menu.Font, System.Drawing.FontStyle.Bold);
             menu.Items.Add(openItem);
 
-            // ── Copy URL ──────────────────────────────────────────────────────
             var copyUrlItem = new System.Windows.Forms.ToolStripMenuItem(
                 "📋  Copy URL", null,
-                (s, ev) =>
-                {
-                    if (!string.IsNullOrEmpty(rowUrl))
-                        Clipboard.SetText(rowUrl);
-                });
+                (s, ev) => { if (!string.IsNullOrEmpty(rowUrl)) Clipboard.SetText(rowUrl); });
             copyUrlItem.Enabled = !string.IsNullOrEmpty(rowUrl);
             menu.Items.Add(copyUrlItem);
 
             menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-
-            // ── Copy row(s) ───────────────────────────────────────────────────
-            menu.Items.Add("📄  Copy Selected Rows", null,
-                (s, ev) => button_CopyOutput_Click(s, ev));
-            menu.Items.Add("📄  Copy All Rows", null,
-                (s, ev) =>
-                {
-                    dataGridView_Output.ClearSelection();
-                    button_CopyOutput_Click(s, ev);
-                });
+            menu.Items.Add("📄  Copy Selected Rows", null, (s, ev) => button_CopyOutput_Click(s, ev));
+            menu.Items.Add("📄  Copy All Rows", null, (s, ev) =>
+            {
+                dataGridView_Output.ClearSelection();
+                button_CopyOutput_Click(s, ev);
+            });
 
             menu.Show(dataGridView_Output, e.Location);
         }
 
+        // ════════════════════════════════════════════════════════════════════════
+        //  SCAN BASE DETECTION
+        // ════════════════════════════════════════════════════════════════════════
 
-
-        /// <summary>
-        /// Given a target URL, returns every "base" URL that sensitive-file paths
-        /// should be appended to: the root authority AND every parent folder
-        /// walking up from the full path.
-        ///
-        /// e.g. http://localhost:81/ERP/Seller-Login.aspx
-        ///   -> http://localhost:81
-        ///   -> http://localhost:81/ERP
-        ///
-        /// e.g. http://localhost:81/ERP/Sub/Page.aspx
-        ///   -> http://localhost:81
-        ///   -> http://localhost:81/ERP
-        ///   -> http://localhost:81/ERP/Sub
-        /// </summary>
         private async Task<List<string>> GetScanBasesAsync(string url, CancellationToken ct)
         {
             var bases = new List<string>();
             var uri = new Uri(url);
-
             string authority = uri.GetLeftPart(UriPartial.Authority);
             bases.Add(authority);
 
@@ -1016,22 +940,17 @@ namespace ThreatScanner
             for (int i = 0; i < segments.Length; i++)
             {
                 string seg = segments[i];
-
-                // Explicit extension anywhere in the segment => definitely a file.
-                // Stop walking deeper — nothing after a file can be a real folder.
-                if (seg.Contains("."))
-                    break;
+                if (seg.Contains(".")) break;
 
                 sb.Append('/').Append(seg);
                 string candidateUrl = authority + sb.ToString();
 
-                // Ambiguous extensionless segment — ask the server which it is.
                 bool isFile = await IsActuallyAFileAsync(candidateUrl, ct);
                 if (isFile)
                 {
                     AddRow("Path Check", "ℹ️ Detected as FILE",
                         $"{candidateUrl} — extensionless file route, not scanning as folder");
-                    break; // stop walking — nothing under a file is a real subfolder
+                    break;
                 }
 
                 bases.Add(candidateUrl);
@@ -1039,37 +958,16 @@ namespace ThreatScanner
 
             return bases;
         }
-        /// <summary>
-        /// Probes whether a given path segment is actually a FILE (e.g. an
-        /// extensionless ASP.NET route) as opposed to a real FOLDER.
-        ///
-        /// IMPORTANT: a soft-404 mismatch alone is NOT reliable evidence of
-        /// "file" — different folders on the same server can legitimately
-        /// produce different 404 styles (IIS static handler vs custom error
-        /// page) depending on routing config. We only call something a FILE
-        /// when we get a strong, unambiguous signal: a 500-class error, since
-        /// that's what ASP.NET typically throws when you try to route "under"
-        /// a compiled page/handler that isn't a directory.
-        /// Default assumption is FOLDER.
-        /// </summary>
+
         private async Task<bool> IsActuallyAFileAsync(string segmentUrl, CancellationToken ct)
         {
             try
             {
                 string canaryChild = segmentUrl.TrimEnd('/') + "/__ts_canary_" + Guid.NewGuid().ToString("N");
                 var resp = await _http.GetAsync(canaryChild, ct);
-                int code = (int)resp.StatusCode;
-
-                // Only a server-error response under the segment is strong
-                // enough evidence that it's a file masquerading as a folder.
-                // 404s of any flavor are NOT evidence — too many legitimate
-                // reasons a folder's 404 can differ from the root's.
-                return code == 500;
+                return (int)resp.StatusCode == 500;
             }
-            catch
-            {
-                return false; // probe failed — default to folder, don't lose coverage
-            }
+            catch { return false; }
         }
     }
 }

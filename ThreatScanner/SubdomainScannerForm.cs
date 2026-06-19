@@ -39,6 +39,10 @@ namespace ThreatScanner
         // How many subdomains to probe over HTTP concurrently.
         private const int ProbeConcurrency = 20;
 
+        // ── Progress tracking ───────────────────────────────────────────────────
+        private int _totalWork;
+        private int _doneWork;
+
         public SubdomainScannerForm() => InitializeComponent();
 
         // ════════════════════════════════════════════════════════════════════════
@@ -64,15 +68,81 @@ namespace ThreatScanner
 
         private void SetProgress(bool running)
         {
-            progressBar_Scan.Style = running ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
-            if (!running) progressBar_Scan.Value = 0;
+            // While scanning: fixed column widths (no per-row layout recalculation)
+            // and a real percentage bar instead of an indeterminate marquee.
+            var mode = running ? DataGridViewAutoSizeColumnMode.None : DataGridViewAutoSizeColumnMode.Fill;
+            colName.AutoSizeMode = mode;
+            colStatus.AutoSizeMode = mode;
+            colResponse.AutoSizeMode = mode;
+
+            if (running)
+            {
+                colName.Width = 320;
+                colStatus.Width = 140;
+                colResponse.Width = Math.Max(300, dataGridView_Output.ClientSize.Width - 320 - 140);
+            }
+
+            progressBar_Scan.Style = ProgressBarStyle.Blocks;
+            progressBar_Scan.Minimum = 0;
+            progressBar_Scan.Maximum = 100;
+            progressBar_Scan.Value = 0;
+
+            _doneWork = 0;
+            _totalWork = 0;
+            UpdateProgressLabel();
         }
 
-        /// <summary>Add a row to the DataGridView (thread-safe).</summary>
+        /// <summary>Call once you know how many discrete steps the scan will perform
+        /// (wordlist size + number of hosts to probe), before those phases start.</summary>
+        private void SetTotalWork(int total)
+        {
+            _totalWork = Math.Max(1, total);
+            Interlocked.Exchange(ref _doneWork, 0);
+            UpdateProgressLabel();
+        }
+
+        /// <summary>Increment completed work by one unit and refresh the bar/label (thread-safe).</summary>
+        private void BumpProgress()
+        {
+            int done = Interlocked.Increment(ref _doneWork);
+            UpdateProgressLabel();
+
+            int pct = _totalWork > 0 ? Math.Min(100, (int)(done * 100L / _totalWork)) : 0;
+
+            void Do() => progressBar_Scan.Value = pct;
+
+            if (progressBar_Scan.InvokeRequired)
+                progressBar_Scan.BeginInvoke((Action)Do);
+            else
+                Do();
+        }
+
+        private void UpdateProgressLabel()
+        {
+            void Do() => label_ScanInfo.Text = _totalWork > 0
+                ? $"Progress: {_doneWork}/{_totalWork} ({Math.Min(100, _doneWork * 100 / _totalWork)}%)"
+                : "Progress: idle";
+
+            if (label_ScanInfo.InvokeRequired)
+                label_ScanInfo.BeginInvoke((Action)Do);
+            else
+                Do();
+        }
+
+        /// <summary>Add a row to the DataGridView (thread-safe, non-blocking).</summary>
         private void AddRow(string name, string status, string response)
         {
             void Do()
             {
+                // Only auto-scroll if the user is already looking at the bottom —
+                // otherwise we'd yank them away from rows they're reading, and we
+                // avoid an unconditional scroll/redraw on every single insert.
+                bool wasAtBottom = dataGridView_Output.Rows.Count == 0
+                    || (dataGridView_Output.FirstDisplayedScrollingRowIndex >= 0
+                        && dataGridView_Output.FirstDisplayedScrollingRowIndex
+                           + dataGridView_Output.DisplayedRowCount(false)
+                           >= dataGridView_Output.Rows.Count - 2);
+
                 int idx = dataGridView_Output.Rows.Add(name, status, response);
                 var row = dataGridView_Output.Rows[idx];
 
@@ -91,11 +161,14 @@ namespace ThreatScanner
                 row.Cells["colStatus"].Style.ForeColor = fore;
                 row.Cells["colStatus"].Style.BackColor = back;
 
-                dataGridView_Output.FirstDisplayedScrollingRowIndex = idx;
+                if (wasAtBottom)
+                    dataGridView_Output.FirstDisplayedScrollingRowIndex = idx;
             }
 
+            // BeginInvoke is non-blocking — worker threads queue the UI update and
+            // move on immediately instead of stalling on the UI thread.
             if (dataGridView_Output.InvokeRequired)
-                dataGridView_Output.Invoke((Action)Do);
+                dataGridView_Output.BeginInvoke((Action)Do);
             else
                 Do();
         }
@@ -148,6 +221,7 @@ namespace ThreatScanner
                     var certSpotterNames = certSpotterTask.Result;
 
                     // 3. Active: DNS wordlist brute-force
+                    SetTotalWork(SubdomainWordlist.Length); // brute-force phase counted first
                     var bruteNames = await BruteForceDns(domain, ct);
 
                     // 4. Merge + dedupe across all sources
@@ -163,7 +237,11 @@ namespace ThreatScanner
 
                     // 5. Live HTTP/HTTPS probing of every resolved subdomain
                     if (checkBox_ProbeHttp.Checked)
-                        await ProbeAllAsync(allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(), ct);
+                    {
+                        var probeList = allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+                        SetTotalWork(probeList.Count); // probe phase has its own counter
+                        await ProbeAllAsync(probeList, ct);
+                    }
                     else
                     {
                         foreach (var n in allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -331,8 +409,8 @@ namespace ThreatScanner
                     + "&include_subdomains=true"
                     + "&expand=dns_names";
 
-                 var req = new HttpRequestMessage(HttpMethod.Get, url);
-                 var resp = await _http.SendAsync(req, ct);
+                var req = new HttpRequestMessage(HttpMethod.Get, url);
+                var resp = await _http.SendAsync(req, ct);
 
                 if (resp.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
                 {
@@ -352,7 +430,7 @@ namespace ThreatScanner
                     return names;
                 }
 
-                 var doc = JsonDocument.Parse(body);
+                var doc = JsonDocument.Parse(body);
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var issuance in doc.RootElement.EnumerateArray())
@@ -424,6 +502,7 @@ namespace ThreatScanner
                     finally
                     {
                         Interlocked.Increment(ref checkedCount);
+                        BumpProgress();
                         throttle.Release();
                     }
                 }, ct));
@@ -450,7 +529,11 @@ namespace ThreatScanner
             {
                 await throttle.WaitAsync(ct);
                 try { await ProbeOneAsync(name, ct); }
-                finally { throttle.Release(); }
+                finally
+                {
+                    BumpProgress();
+                    throttle.Release();
+                }
             });
 
             await Task.WhenAll(tasks);
@@ -464,11 +547,11 @@ namespace ThreatScanner
                 try
                 {
                     string url = scheme + name;
-                     var req = new HttpRequestMessage(HttpMethod.Get, url);
-                     var cts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    var cts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     cts2.CancelAfter(TimeSpan.FromSeconds(8));
 
-                     var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts2.Token);
+                    var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts2.Token);
                     int code = (int)resp.StatusCode;
 
                     string title = "";
@@ -645,81 +728,160 @@ namespace ThreatScanner
         // ════════════════════════════════════════════════════════════════════════
 
         private static readonly string[] SubdomainWordlist =
-        {
+      {
             // Core / common
             "www", "mail", "webmail", "email", "ftp", "sftp", "ssh", "vpn", "remote",
-            "ns1", "ns2", "ns3", "ns4", "dns", "dns1", "dns2", "mx", "mx1", "mx2",
+            "ns1", "ns2", "ns3", "ns4", "dns", "mx", "owa", "autodiscover", "smtp",
 
             // Environments
-            "dev", "develop", "development", "staging", "stage", "test", "testing",
-            "qa", "uat", "preprod", "pre-prod", "prod", "production", "sandbox",
-            "demo", "beta", "alpha", "canary", "preview", "local",
+            "dev", "develop", "development", "staging", "stage", "stg", "test", "testing", "qa",
+            "uat", "preprod", "pre-prod", "prod", "production", "sandbox", "demo", "beta", "alpha",
+            "canary", "preview", "local", "integration", "sit", "perf", "performance", "loadtest", "dr",
+            "failover",
 
             // Admin / internal
-            "admin", "administrator", "panel", "cpanel", "whm", "portal", "console",
-            "dashboard", "manage", "management", "control", "backend", "internal",
-            "intranet", "private", "secure", "system", "sys", "root", "master",
+            "admin", "administrator", "panel", "cpanel", "whm", "portal", "console", "dashboard", "manage",
+            "management", "control", "backend", "internal", "intranet", "private", "secure", "system", "sys",
+            "root", "master", "ops", "operations", "noc", "soc", "helpdesk-admin",
 
             // Web tiers
-            "app", "apps", "web", "web1", "web2", "site", "static", "assets",
-            "cdn", "media", "img", "images", "video", "videos", "files", "file",
-            "download", "downloads", "upload", "uploads", "content", "data",
+            "app", "apps", "web", "site", "static", "assets", "cdn", "media", "img",
+            "images", "pic", "pics", "video", "videos", "files", "file", "download", "downloads",
+            "upload", "uploads", "content", "data", "front", "frontend", "landing", "home", "go",
 
             // API / services
-            "api", "api1", "api2", "apiv1", "apiv2", "rest", "graphql", "ws",
-            "websocket", "socket", "service", "services", "gateway", "microservice",
-            "rpc", "grpc", "soap",
+            "api", "apidocs", "rest", "graphql", "ws", "websocket", "socket", "service", "services",
+            "gateway", "microservice", "rpc", "grpc", "soap", "webhook", "webhooks", "sdk", "developer",
+            "developers",
 
             // Auth / identity
-            "auth", "sso", "login", "signin", "oauth", "identity", "idp", "accounts",
-            "account", "id", "iam",
+            "auth", "sso", "login", "signin", "signup", "register", "oauth", "identity", "idp",
+            "accounts", "account", "id", "iam", "passport", "session", "myaccount",
 
             // Databases / infra
-            "db", "database", "sql", "mysql", "postgres", "redis", "mongo", "elastic",
-            "elasticsearch", "kibana", "grafana", "prometheus", "metrics", "logs",
-            "logging", "log", "monitor", "monitoring", "status", "health",
+            "db", "database", "sql", "mysql", "postgres", "postgresql", "redis", "mongo", "mongodb",
+            "elastic", "elasticsearch", "kibana", "grafana", "prometheus", "metrics", "logs", "logging", "log",
+            "monitor", "monitoring", "status", "health", "stats", "uptime", "telemetry",
 
             // DevOps / CI
-            "git", "gitlab", "github", "bitbucket", "svn", "ci", "cd", "cicd",
-            "jenkins", "build", "builds", "deploy", "deployment", "registry",
-            "docker", "k8s", "kubernetes", "helm", "artifactory", "nexus",
+            "git", "gitlab", "github", "bitbucket", "svn", "ci", "cd", "cicd", "jenkins",
+            "build", "builds", "deploy", "deployment", "registry", "docker", "k8s", "kubernetes", "helm",
+            "artifactory", "nexus", "pipeline", "runner", "sonar", "sonarqube",
 
             // Cloud / networking
-            "cloud", "aws", "azure", "gcp", "s3", "storage", "blob", "lb",
-            "loadbalancer", "proxy", "reverse-proxy", "gw", "edge", "origin",
-            "cache", "cdn1", "cdn2",
+            "cloud", "aws", "azure", "gcp", "s3", "storage", "blob", "lb", "loadbalancer",
+            "proxy", "reverse-proxy", "gw", "edge", "origin", "cache", "vip", "nat", "firewall",
+            "router", "switch", "subnet", "network",
 
             // Communication
-            "chat", "support", "help", "helpdesk", "ticket", "tickets", "forum",
-            "forums", "community", "blog", "news", "newsletter", "social",
+            "chat", "support", "help", "helpdesk", "ticket", "tickets", "forum", "forums", "community",
+            "blog", "news", "newsletter", "social", "feedback", "survey", "contact", "contactus", "live",
+            "livechat",
 
-            // Business / misc
-            "shop", "store", "checkout", "payment", "payments", "billing", "pay",
-            "cart", "orders", "order", "invoice", "crm", "erp", "hr", "hris",
-            "partner", "partners", "vendor", "vendors", "client", "clients",
-            "customer", "customers", "client-portal", "extranet",
+            // Business / commerce
+            "shop", "store", "checkout", "payment", "payments", "billing", "pay", "cart", "orders",
+            "order", "invoice", "invoices", "crm", "erp", "hr", "hris", "payroll", "partner",
+            "partners", "vendor", "vendors", "client", "clients", "customer", "customers", "client-portal", "extranet",
+            "b2b", "b2c", "pos",
 
-            // Regions / numbered
-            "us", "eu", "uk", "asia", "apac", "east", "west", "north", "south",
-            "us-east", "us-west", "eu-west", "eu-central",
-            "server1", "server2", "node1", "node2", "host1", "host2",
-            "vm1", "vm2", "app1", "app2", "web3", "api3",
+            // Finance / banking
+            "bank", "banking", "finance", "financial", "treasury", "ledger", "accounting", "tax", "loans",
+            "loan", "credit", "card", "cards", "wallet", "wire", "transfer", "statements", "reports",
+            "audit",
 
-            // Mobile / misc apps
-            "m", "mobile", "wap", "ios", "android", "app-api",
+            // Regions / geography
+            "us", "eu", "uk", "asia", "apac", "emea", "latam", "east", "west",
+            "north", "south", "us-east", "us-west", "eu-west", "eu-central", "ap-south", "global", "regional",
 
-            // Misc tech
-            "ns", "smtp", "smtp1", "smtp2", "pop", "pop3", "imap", "relay",
-            "ntp", "time", "ldap", "radius", "ad", "dc", "vault", "secrets",
-            "kms", "pki", "ca", "ocsp", "crl",
+            // Mobile / client apps
+            "m", "mobile", "wap", "ios", "android", "tv", "watch", "tablet",
 
-            // Old / legacy
-            "old", "legacy", "archive", "backup", "backups", "bak", "tmp", "temp",
-            "new", "new-site", "v1", "v2", "v3",
+            // Misc tech / protocols
+            "ns", "pop", "pop3", "imap", "relay", "ntp", "time", "ldap", "radius",
+            "ad", "dc", "vault", "secrets", "kms", "pki", "ca", "ocsp", "crl",
+            "dhcp", "syslog", "ntp1", "ntp2",
 
-            // Wildcard-y generic
-            "git2", "wiki", "docs", "documentation", "kb", "knowledgebase",
-            "training", "lms", "elearning", "jobs", "careers", "recruiting"
+            // Old / legacy / versioned
+            "old", "legacy", "archive", "backup", "backups", "bak", "tmp", "temp", "new",
+            "v1", "v2", "v3", "next", "classic", "retired",
+
+            // Docs / knowledge
+            "wiki", "docs", "documentation", "kb", "knowledgebase", "training", "lms", "elearning", "jobs",
+            "careers", "recruiting", "faq", "manual", "guide", "handbook",
+
+            // Security / compliance
+            "security", "infosec", "compliance", "privacy", "gdpr", "trust", "vault-secure", "pentest", "scanner",
+            "waf", "ids", "ips", "siem", "phish", "abuse",
+
+            // Marketing / growth
+            "marketing", "promo", "promotions", "campaign", "campaigns", "ads", "advertising", "affiliate", "affiliates",
+            "referral", "tracking", "analytics", "pixel", "events",
+
+            // Education / public sector
+            "school", "university", "college", "edu", "student", "students", "alumni", "library", "registrar",
+            "admissions", "gov", "government", "city", "county",
+
+            // IoT / hardware
+            "iot", "device", "devices", "sensor", "sensors", "firmware", "gateway-iot", "camera", "cameras",
+            "printer", "scanner-device", "kiosk", "terminal",
+
+            // Gaming / media streaming
+            "game", "games", "play", "gaming", "stream", "streaming", "live-stream", "video-stream", "broadcast",
+            "podcast", "music", "radio",
+
+            // Misc business functions
+            "legal", "procurement", "logistics", "warehouse", "inventory", "shipping", "fulfillment", "scheduling", "calendar",
+            "booking", "reservations", "events-booking",
+
+            // Healthcare
+            "healthcare", "patient", "patients", "clinic", "clinical", "hospital", "ehr", "emr", "pharmacy",
+            "lab", "labs", "diagnostics", "telehealth", "appointments", "insurance", "claims", "provider", "providers",
+
+            // Real estate / facilities
+            "realestate", "property", "properties", "listings", "leasing", "rentals", "facilities", "maintenance", "tenant",
+            "tenants", "building", "buildings", "campus",
+
+            // Telecom
+            "telecom", "voip", "sip", "pbx", "phone", "fax", "sms", "messaging", "carrier",
+            "roaming", "billing-telecom", "network-ops",
+
+            // Automotive / fleet
+            "fleet", "vehicle", "vehicles", "dealer", "dealers", "service-center", "parts", "garage", "tracking-fleet",
+            "telematics",
+
+            // Travel / hospitality
+            "travel", "booking-travel", "hotel", "hotels", "flights", "airline", "tickets-travel", "tours", "rewards",
+            "loyalty", "checkin", "concierge",
+
+            // Manufacturing / supply chain
+            "manufacturing", "factory", "plant", "production-line", "supply", "supplychain", "procurement-mfg", "quality", "qc",
+            "scada", "plc",
+
+            // Nonprofit / community
+            "donate", "donations", "fundraising", "volunteer", "volunteers", "outreach", "members", "membership", "foundation",
+            "grants",
+
+            // Sports / fitness
+            "sports", "fitness", "gym", "league", "scores", "stats-sports", "team", "teams", "tickets-sports",
+            "schedule",
+
+            // Agriculture
+            "farm", "farming", "agriculture", "crop", "crops", "livestock", "harvest", "irrigation",
+
+            // Energy / utilities
+            "energy", "utilities", "power", "grid", "solar", "meter", "metering", "outage", "billing-utility",
+            "consumption",
+
+            // Legal / extra
+            "legalteam", "contracts", "compliance-legal", "litigation", "patents", "trademarks",
+
+            // HR / extra
+            "benefits", "onboarding", "offboarding", "timesheet", "timeoff", "performance-review",
+
+            // Extra misc
+            "search", "directory", "sitemap", "rss", "feed", "export", "import", "sync-service", "notify",
+            "notifications", "alerts", "reminder", "scheduler", "queue-worker",
+
         };
     }
 }

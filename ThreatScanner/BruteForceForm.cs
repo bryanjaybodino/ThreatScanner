@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,14 +19,96 @@ namespace ThreatScanner
     /// </summary>
     public partial class BruteForceForm : Form
     {
-        public BruteForceForm() => InitializeComponent();
+        // ── UI batching ──────────────────────────────────────────────────────
+        // Worker threads enqueue log entries; the UI timer drains them all in
+        // one SuspendLayout/ResumeLayout pass.  This mirrors the exact pattern
+        // used in WebSocketForm and avoids per-row Invoke + per-row repaint.
+        private readonly ConcurrentQueue<PendingRow> _pendingRows = new ConcurrentQueue<PendingRow>();
+        private readonly System.Windows.Forms.Timer _flushTimer = new System.Windows.Forms.Timer { Interval = 75 };
+        private const int MaxRows = 2000;
 
-        // ─── HELPERS ─────────────────────────────────────────────────────────────
+        private readonly struct PendingRow
+        {
+            public readonly string Icon, Message;
+            public PendingRow(string icon, string message) { Icon = icon; Message = message; }
+        }
 
-        private void Log(string icon, string msg) => ScanHelpers.Log(listBox_Output, icon, msg);
-        private void HtmlLog(string icon, string msg) => ScanHelpers.HtmlLog(listBox_Output, icon, msg);
-        private void LogSep() => ScanHelpers.LogSeparator(listBox_Output);
-        private void ClearOut() => ScanHelpers.ClearOutput(listBox_Output);
+        public BruteForceForm()
+        {
+            InitializeComponent();
+
+            _flushTimer.Tick += (s, e) => FlushPendingRows();
+            _flushTimer.Start();
+            this.FormClosed += (s, e) => _flushTimer.Stop();
+        }
+
+        // ─── QUEUE-BASED LOGGING ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Queues one log line. Safe to call from any thread — never marshals
+        /// to the UI thread directly; the flush timer handles that in bulk.
+        /// </summary>
+        private void Log(string icon, string msg)
+            => _pendingRows.Enqueue(new PendingRow(icon, msg));
+
+        /// <summary>
+        /// Queues an HTML-stripped log line (delegates stripping to ScanHelpers).
+        /// Safe to call from any thread.
+        /// </summary>
+        private void HtmlLog(string icon, string msg)
+        {
+            // Strip HTML tags before queuing so the worker doesn't need to
+            // touch the UI; ScanHelpers.HtmlLog normally does this plus an
+            // Invoke — we replicate only the stripping part here.
+            string stripped = System.Text.RegularExpressions.Regex.Replace(msg, "<.*?>", string.Empty);
+            _pendingRows.Enqueue(new PendingRow(icon, stripped));
+        }
+
+        private void LogSep() => Log("", new string('─', 60));
+
+        /// <summary>
+        /// Drains the pending-row queue and appends all entries to the ListBox
+        /// in a single BeginUpdate/EndUpdate pass.  Runs on the UI thread only
+        /// (called from the Timer.Tick event).
+        /// </summary>
+        private void FlushPendingRows()
+        {
+            if (_pendingRows.IsEmpty) return;
+
+            // Snapshot whether the list is already scrolled to the bottom so
+            // we can restore that behaviour without yanking the user away from
+            // rows they are reading.
+            bool wasAtBottom = listBox_Output.Items.Count == 0
+                || listBox_Output.TopIndex >= listBox_Output.Items.Count
+                   - listBox_Output.ClientSize.Height / listBox_Output.ItemHeight - 1;
+
+            listBox_Output.BeginUpdate();
+            try
+            {
+                while (_pendingRows.TryDequeue(out var pr))
+                    listBox_Output.Items.Add($"{pr.Icon}  {pr.Message}".TrimStart());
+
+                // Cap list size so a long fuzz run can't bloat memory/repaint cost.
+                int overflow = listBox_Output.Items.Count - MaxRows;
+                if (overflow > 0)
+                    for (int i = 0; i < overflow; i++)
+                        listBox_Output.Items.RemoveAt(0);
+            }
+            finally
+            {
+                listBox_Output.EndUpdate();
+            }
+
+            if (wasAtBottom && listBox_Output.Items.Count > 0)
+                listBox_Output.TopIndex = listBox_Output.Items.Count - 1;
+        }
+
+        private void ClearOut()
+        {
+            // Drain the queue first so stale rows don't reappear after a clear.
+            while (_pendingRows.TryDequeue(out _)) { }
+            ScanHelpers.ClearOutput(listBox_Output);
+        }
 
         private void SetProgress(bool running)
         {
@@ -96,11 +179,10 @@ namespace ThreatScanner
                     LoginFramework fw = DetectFramework(probeHtml);
 
                     var (usernameField, passwordField) = AutoDetectLoginFields(probeHtml);
-                    Invoke((Action)(() =>
-                    {
-                        Log("🔎", $"Framework detected: {fw}");
-                        Log("👤", $"Auto-detected → User: [{usernameField}]  Pass: [{passwordField}]");
-                    }));
+
+                    // All Log() calls below are thread-safe — no Invoke required.
+                    Log("🔎", $"Framework detected: {fw}");
+                    Log("👤", $"Auto-detected → User: [{usernameField}]  Pass: [{passwordField}]");
 
                     foreach (string pwd in passwords)
                     {
@@ -125,14 +207,14 @@ namespace ThreatScanner
                                 fields.Add(new KeyValuePair<string, string>("__SCROLLPOSITIONX", "0"));
                                 fields.Add(new KeyValuePair<string, string>("__SCROLLPOSITIONY", "0"));
                                 int vsLen = hidden.ContainsKey("__VIEWSTATE") ? hidden["__VIEWSTATE"].Length : 0;
-                                Invoke((Action)(() => Log("🔄", $"  ASP.NET → EVENTTARGET: {et}  VIEWSTATE len: {vsLen}")));
+                                Log("🔄", $"  ASP.NET → EVENTTARGET: {et}  VIEWSTATE len: {vsLen}");
                             }
                             else if (fw == LoginFramework.PhpOrHtml)
                             {
                                 var hidden = ExtractAllHiddenFields(html);
                                 foreach (var kv in hidden)
                                     fields.Add(new KeyValuePair<string, string>(kv.Key, kv.Value));
-                                Invoke((Action)(() => Log("🔄", $"  PHP/HTML → {hidden.Count} hidden field(s) harvested")));
+                                Log("🔄", $"  PHP/HTML → {hidden.Count} hidden field(s) harvested");
 
                                 int btnPos = html.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase);
                                 if (btnPos >= 0)
@@ -151,7 +233,7 @@ namespace ThreatScanner
                             }
                             else
                             {
-                                Invoke((Action)(() => Log("🔄", "  Generic → username + password only")));
+                                Log("🔄", "  Generic → username + password only");
                             }
 
                             var (curUser, curPass) = AutoDetectLoginFields(html);
@@ -180,12 +262,9 @@ namespace ThreatScanner
                                 postUrl = BuildPostUrl(url, action);
                             }
 
-                            Invoke((Action)(() =>
-                            {
-                                Log("🌐", $"POST URL: {postUrl}");
-                                Log("📦", "FIELDS:");
-                                foreach (var f in fields) Log("   ", $"{f.Key} = {f.Value}");
-                            }));
+                            Log("🌐", $"POST URL: {postUrl}");
+                            Log("📦", "FIELDS:");
+                            foreach (var f in fields) Log("   ", $"{f.Key} = {f.Value}");
 
                             var postResp = await client.PostAsync(postUrl, new FormUrlEncodedContent(fields));
                             string body = await postResp.Content.ReadAsStringAsync();
@@ -197,22 +276,18 @@ namespace ThreatScanner
 
                             if (success)
                             {
-                                Invoke((Action)(() =>
-                                {
-                                    Log("🚨", $"  [{pwd}] HTTP {code}  SUCCESS — credentials accepted!");
-                                    HtmlLog("   ", $"  response: {body}");
-                                }));
+                                Log("🚨", $"  [{pwd}] HTTP {code}  SUCCESS — credentials accepted!");
+                                HtmlLog("   ", $"  response: {body}");
                                 break;
                             }
                             else
                             {
-                                Invoke((Action)(() =>
-                                    Log("🔒", $"  [{pwd}] HTTP {code}  Failed — wrong credentials")));
+                                Log("🔒", $"  [{pwd}] HTTP {code}  Failed — wrong credentials");
                             }
                         }
                         catch (Exception ex)
                         {
-                            Invoke((Action)(() => Log("❌", "Request error: " + ex.Message)));
+                            Log("❌", "Request error: " + ex.Message);
                             break;
                         }
                     }
@@ -220,6 +295,9 @@ namespace ThreatScanner
             }
             finally
             {
+                // Button/progress updates must still happen on the UI thread.
+                // Use Invoke here (only once, at the very end) rather than
+                // wrapping every log call.
                 Invoke((Action)(() =>
                 {
                     LogSep();

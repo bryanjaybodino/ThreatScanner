@@ -169,11 +169,10 @@
             this.panel_Options.Controls.Add(this.button_StopScan);
             this.panel_Options.Controls.Add(this.checkBox_ProbeHttp);
             this.panel_Options.Controls.Add(this.checkBox_IncludeRoot);
-            this.panel_Options.Controls.Add(this.label_ScanInfo);
             this.panel_Options.Dock = System.Windows.Forms.DockStyle.Top;
             this.panel_Options.Location = new System.Drawing.Point(0, 116);
             this.panel_Options.Name = "panel_Options";
-            this.panel_Options.Size = new System.Drawing.Size(1200, 80);
+            this.panel_Options.Size = new System.Drawing.Size(1200, 57);
             this.panel_Options.TabIndex = 1;
             // 
             // button_Scan
@@ -241,10 +240,11 @@
             // 
             // label_ScanInfo
             // 
+            this.label_ScanInfo.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.label_ScanInfo.AutoSize = true;
             this.label_ScanInfo.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.label_ScanInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
-            this.label_ScanInfo.Location = new System.Drawing.Point(18, 50);
+            this.label_ScanInfo.Location = new System.Drawing.Point(979, 5);
             this.label_ScanInfo.Name = "label_ScanInfo";
             this.label_ScanInfo.Size = new System.Drawing.Size(206, 20);
             this.label_ScanInfo.TabIndex = 4;
@@ -256,11 +256,12 @@
             this.panel_Output.Controls.Add(this.dataGridView_Output);
             this.panel_Output.Controls.Add(this.label_Output);
             this.panel_Output.Controls.Add(this.progressBar_Scan);
+            this.panel_Output.Controls.Add(this.label_ScanInfo);
             this.panel_Output.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel_Output.Location = new System.Drawing.Point(0, 196);
+            this.panel_Output.Location = new System.Drawing.Point(0, 173);
             this.panel_Output.Name = "panel_Output";
             this.panel_Output.Padding = new System.Windows.Forms.Padding(12, 8, 12, 8);
-            this.panel_Output.Size = new System.Drawing.Size(1200, 504);
+            this.panel_Output.Size = new System.Drawing.Size(1200, 527);
             this.panel_Output.TabIndex = 0;
             // 
             // dataGridView_Output
@@ -301,7 +302,7 @@
             this.dataGridView_Output.RowHeadersVisible = false;
             this.dataGridView_Output.RowHeadersWidth = 51;
             this.dataGridView_Output.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dataGridView_Output.Size = new System.Drawing.Size(1176, 464);
+            this.dataGridView_Output.Size = new System.Drawing.Size(1176, 487);
             this.dataGridView_Output.TabIndex = 0;
             this.dataGridView_Output.MouseDown += new System.Windows.Forms.MouseEventHandler(this.dataGridView_Output_MouseDown);
             // 
@@ -344,7 +345,7 @@
             // progressBar_Scan
             // 
             this.progressBar_Scan.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.progressBar_Scan.Location = new System.Drawing.Point(12, 492);
+            this.progressBar_Scan.Location = new System.Drawing.Point(12, 515);
             this.progressBar_Scan.MarqueeAnimationSpeed = 30;
             this.progressBar_Scan.Name = "progressBar_Scan";
             this.progressBar_Scan.Size = new System.Drawing.Size(1176, 4);

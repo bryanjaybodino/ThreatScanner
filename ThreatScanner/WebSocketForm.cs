@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -29,11 +30,39 @@ namespace ThreatScanner
         private static readonly Color COLOR_SYSTEM = Color.FromArgb(35, 35, 20);   // dark amber tint
         private static readonly Color COLOR_ERROR = Color.FromArgb(50, 15, 15);   // dark red tint
 
+        // ── UI batching ──────────────────────────────────────────────────────
+        // Worker threads (frame receive loop, fuzz/replay loop) can produce log
+        // rows much faster than WinForms can paint them. Instead of marshalling
+        // to the UI thread once per row (one Invoke + one grid layout/paint
+        // each), we drop pending rows into a thread-safe queue and flush them
+        // all at once on a timer. This turns "N thread-hops + N repaints" into
+        // "~10 thread-hops/sec + ~10 repaints/sec" regardless of how fast rows
+        // arrive, which is what actually removes the visible lag/freeze.
+        private readonly ConcurrentQueue<PendingRow> _pendingRows = new ConcurrentQueue<PendingRow>();
+        private readonly System.Windows.Forms.Timer _flushTimer = new System.Windows.Forms.Timer { Interval = 75 };
+        private const int MaxRows = 5000; // cap so a long fuzz/replay run can't bloat memory/redraw cost
+
+        private readonly struct PendingRow
+        {
+            public readonly string Direction, Type, Status, Data;
+            public PendingRow(string d, string t, string s, string data)
+            { Direction = d; Type = t; Status = s; Data = data; }
+        }
+
         public WebSocketForm()
         {
             InitializeComponent();
             ScanHelpers.EnableRowDeletion(dataGridView_Headers);
             UpdateButtonStates();
+
+            // Suppress the grid's own per-cell auto-resize/redraw while we're
+            // batch-inserting rows; this alone removes a lot of paint overhead
+            // compared to the default per-row autosize behaviour.
+            dataGridView_Output.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+
+            _flushTimer.Tick += (s, e) => FlushPendingRows();
+            _flushTimer.Start();
+            this.FormClosed += (s, e) => _flushTimer.Stop();
 
             // Ctrl+Enter in the message box fires Send
             richTextBox_Message.KeyDown += (s, e) =>
@@ -50,7 +79,9 @@ namespace ThreatScanner
         // ─── GRID LOGGING ────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Adds one row to the message log grid.
+        /// Queues one row for the message log grid. Safe to call from any
+        /// thread — never blocks the caller, never touches the grid directly.
+        /// The actual insert happens in batches via FlushPendingRows().
         /// </summary>
         /// <param name="direction">→ Sent  |  ← Received  |  ℹ System  |  ❌ Error</param>
         /// <param name="type">TXT / BIN / INFO / ERR</param>
@@ -58,12 +89,57 @@ namespace ThreatScanner
         /// <param name="data">The payload or status text (single line, truncated)</param>
         private void LogRow(string direction, string type, string status, string data)
         {
-            if (dataGridView_Output.InvokeRequired)
+            _pendingRows.Enqueue(new PendingRow(direction, type, status, data));
+        }
+
+        /// <summary>
+        /// Drains the pending-row queue and applies all of them to the grid in
+        /// a single SuspendLayout/ResumeLayout batch. Runs on the UI thread
+        /// only (called from the Timer.Tick).
+        /// </summary>
+        private void FlushPendingRows()
+        {
+            if (_pendingRows.IsEmpty) return;
+
+            bool wasAtBottom = dataGridView_Output.Rows.Count == 0
+                || (dataGridView_Output.FirstDisplayedScrollingRowIndex >= 0
+                    && dataGridView_Output.FirstDisplayedScrollingRowIndex
+                       + dataGridView_Output.DisplayedRowCount(false)
+                       >= dataGridView_Output.Rows.Count - 2);
+
+            dataGridView_Output.SuspendLayout();
+            int lastIdx = -1;
+            try
             {
-                dataGridView_Output.Invoke((Action)(() => LogRow(direction, type, status, data)));
-                return;
+                while (_pendingRows.TryDequeue(out var pr))
+                {
+                    lastIdx = InsertRow(pr.Direction, pr.Type, pr.Status, pr.Data);
+                }
+
+                // Trim from the front if we've grown past the cap, so a long
+                // session doesn't keep paying paint/memory cost forever.
+                int overflow = dataGridView_Output.Rows.Count - MaxRows;
+                if (overflow > 0)
+                {
+                    for (int i = 0; i < overflow; i++)
+                        dataGridView_Output.Rows.RemoveAt(0);
+                    lastIdx = dataGridView_Output.Rows.Count - 1;
+                }
+            }
+            finally
+            {
+                dataGridView_Output.ResumeLayout(performLayout: true);
             }
 
+            // Only auto-scroll if the user was already at the bottom — avoids
+            // yanking them away from rows they're reading mid-scan.
+            if (wasAtBottom && lastIdx >= 0)
+                dataGridView_Output.FirstDisplayedScrollingRowIndex = lastIdx;
+        }
+
+        /// <summary>Actual single-row insert. UI-thread only, called from FlushPendingRows.</summary>
+        private int InsertRow(string direction, string type, string status, string data)
+        {
             int num = ++_rowCounter;
             string ts = DateTime.Now.ToString("HH:mm:ss.fff");
 
@@ -111,10 +187,7 @@ namespace ThreatScanner
             else if (status.StartsWith("HTTP 4") || status == "Error" || status == "Timeout")
                 statusCell.Style.ForeColor = Color.FromArgb(252, 165, 165);
 
-            // Auto-scroll to the newest row
-            dataGridView_Output.FirstDisplayedScrollingRowIndex = rowIdx;
-            dataGridView_Output.ClearSelection();
-            row.Selected = true;
+            return rowIdx;
         }
 
         private void LogSysRow(string status, string msg) => LogRow("ℹ  System", "INFO", status, msg);
@@ -122,6 +195,9 @@ namespace ThreatScanner
 
         private void ClearOut()
         {
+            // Drop anything still queued so it doesn't reappear after a clear.
+            while (_pendingRows.TryDequeue(out _)) { }
+
             if (dataGridView_Output.InvokeRequired)
             { dataGridView_Output.Invoke((Action)ClearOut); return; }
             dataGridView_Output.Rows.Clear();
