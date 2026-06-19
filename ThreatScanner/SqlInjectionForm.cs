@@ -29,16 +29,6 @@ namespace ThreatScanner
         private readonly HttpClient _http = ScanHelpers.BuildDefaultClient();
         private CancellationTokenSource _cts;
 
-        private static readonly string[] SqlErrorSignatures = {
-            "sql syntax", "mysql_fetch", "mysqli_", "you have an error in your sql syntax",
-            "microsoft ole db", "odbc sql server driver", "unclosed quotation mark",
-            "sqlstate", "incorrect syntax near",
-            "ora-00933", "ora-01756", "ora-",
-            "pg_query", "warning: pg_", "postgresql query failed",
-            "sqlite3.operationalerror", "sqlite_error", "sqlite",
-            "syntax error", "unterminated string", "quoted string not properly terminated"
-        };
-
         public SqlInjectionForm() => InitializeComponent();
 
         // ════════════════════════════════════════════════════════════════════
@@ -111,6 +101,12 @@ namespace ThreatScanner
                     // 2. Discover and probe HTML forms on the page
                     await ProbeForms(url, ct);
 
+                    // 3. Reflected-XSS probe on the URL's query parameter(s)
+                    await CheckXssHints(url, ct);
+
+                    // 4. Reflected-XSS probe against each <form> field on the page
+                    await ProbeFormsXss(url, ct);
+
                 }, ct);
             }
             catch (OperationCanceledException)
@@ -146,17 +142,7 @@ namespace ThreatScanner
         private async Task ProbeUrlParam(string url, CancellationToken ct)
         {
             AddSep("URL Parameter Probe");
-
-            string param = "id";
-            string testUrl = url.Contains("?")
-                ? $"{url}&{param}={Uri.EscapeDataString("1'")}"
-                : $"{url}?{param}={Uri.EscapeDataString("1'")}";
-
-            await RunSingleProbe($"URL param ({param})", testUrl, async () =>
-            {
-                var resp = await _http.GetAsync(testUrl, ct);
-                return await resp.Content.ReadAsStringAsync();
-            });
+            await SqlInjectionHelper.ProbeUrlParamAsync(_http, url, "id", AddRow, ct);
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -166,126 +152,27 @@ namespace ThreatScanner
         private async Task ProbeForms(string url, CancellationToken ct)
         {
             AddSep("Form Discovery");
-
-            string html;
-            try
-            {
-                var resp = await _http.GetAsync(url, ct);
-                html = await resp.Content.ReadAsStringAsync();
-            }
-            catch (Exception ex)
-            {
-                AddRow("Form Fetch", "❌ Error", ex.Message);
-                return;
-            }
-
-            var forms = FormParsingHelper.ParseForms(html, url);
-            if (forms.Count == 0)
-            {
-                AddRow("Forms", "ℹ️ None found", "No <form> elements detected on this page.");
-                return;
-            }
-
-            AddRow("Forms", "ℹ️ Found", $"{forms.Count} form(s) detected — testing text-like fields one at a time.");
-
-            foreach (var form in forms)
-            {
-                ct.ThrowIfCancellationRequested();
-                AddSep($"Form: {(string.IsNullOrWhiteSpace(form.Name) ? $"#{form.Index + 1}" : form.Name)}");
-                AddRow("Form Target", "ℹ️ Info", $"{form.Method.ToUpper()} {form.Action} ({form.Fields.Count} fields, framework: {form.Framework})");
-
-                // Only inject into fields a user could actually type into.
-                var textFields = form.Fields
-                    .Where(f => !f.IsCsrfToken &&
-                                (f.Type == "text" || f.Type == "email" || f.Type == "search" ||
-                                 f.Type == "password" || f.Type == "textarea" || f.Type == "tel" ||
-                                 f.Type == "url" || string.IsNullOrEmpty(f.Type)))
-                    .ToList();
-
-                if (textFields.Count == 0)
-                {
-                    AddRow(form.ToString(), "ℹ️ Skipped", "No text-like fields to test.");
-                    continue;
-                }
-
-                foreach (var field in textFields)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    await ProbeFormField(form, field, ct);
-                }
-            }
-        }
-
-        private async Task ProbeFormField(
-            FormParsingHelper.FormInfo form, FormParsingHelper.FormField targetField, CancellationToken ct)
-        {
-            // Inject the probe payload into the target field only; keep every other
-            // field's auto-filled / existing value (incl. CSRF tokens) so the request
-            // looks like a normal form submission.
-            var originalValue = targetField.Value;
-            targetField.Value = (originalValue ?? "") + "'";
-
-            string label = $"Form field: {targetField.Name}";
-
-            try
-            {
-                await RunSingleProbe(label, form.Action, async () =>
-                {
-                    HttpResponseMessage resp;
-                    if (form.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string qs = FormParsingHelper.BuildRequestBody(form, includeCsrfTokens: true);
-                        string getUrl = form.Action.Contains("?") ? $"{form.Action}&{qs}" : $"{form.Action}?{qs}";
-                        resp = await _http.GetAsync(getUrl, ct);
-                    }
-                    else
-                    {
-                        string body = FormParsingHelper.BuildRequestBody(form, includeCsrfTokens: true);
-                        var content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded");
-                        resp = await _http.PostAsync(form.Action, content, ct);
-                    }
-                    return await resp.Content.ReadAsStringAsync();
-                });
-            }
-            finally
-            {
-                targetField.Value = originalValue; // restore for next field's probe
-            }
+            await SqlInjectionHelper.ProbeFormsAsync(_http, url, AddRow, AddSep, ct);
         }
 
         // ════════════════════════════════════════════════════════════════════
-        //  SHARED SINGLE-PROBE LOGIC
+        //  PROBE 3: XSS — URL query parameter
         // ════════════════════════════════════════════════════════════════════
 
-        private async Task RunSingleProbe(string label, string requestDescription, Func<Task<string>> sendRequest)
+        private async Task CheckXssHints(string url, CancellationToken ct)
         {
-            try
-            {
-                string body = await sendRequest();
-                var matched = SqlErrorSignatures.FirstOrDefault(err =>
-                    body.IndexOf(err, StringComparison.OrdinalIgnoreCase) >= 0);
+            AddSep("XSS Parameter Probe");
+            await XssHelper.ProbeUrlParamAsync(_http, url, "q", AddRow, ct);
+        }
 
-                if (matched != null)
-                {
-                    AddRow(label, "🚨 Possible SQLi",
-                        $"DB error signature \"{matched}\" found. Likely unsanitized input reaching a SQL query. " +
-                        "Fix: use parameterized queries / prepared statements, never concatenate user input into SQL; " +
-                        "disable detailed error pages in production.");
-                }
-                else
-                {
-                    AddRow(label, "✅ No disclosure",
-                        "No known DB error patterns found. Passive check only — does not rule out blind/second-order injection.");
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                AddRow(label, "⚠️ Timeout", $"Request to {requestDescription} timed out.");
-            }
-            catch (Exception ex)
-            {
-                AddRow(label, "❌ Error", ex.Message);
-            }
+        // ════════════════════════════════════════════════════════════════════
+        //  PROBE 4: XSS — HTML forms on the page
+        // ════════════════════════════════════════════════════════════════════
+
+        private async Task ProbeFormsXss(string url, CancellationToken ct)
+        {
+            AddSep("Form XSS Probe");
+            await XssHelper.ProbeFormsAsync(_http, url, AddRow, AddSep, ct);
         }
 
         // ════════════════════════════════════════════════════════════════════

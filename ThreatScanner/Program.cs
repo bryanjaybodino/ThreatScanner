@@ -42,10 +42,14 @@ namespace ThreatScanner
         [STAThread]
         static void Main()
         {
-            EnableDpiAwareness();                          // must be called FIRST
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            try
+            {
+                EnableDpiAwareness();                          // must be called FIRST
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new MainForm());
+            }
+            catch { }
         }
     }
 }

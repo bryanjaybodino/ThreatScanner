@@ -14,9 +14,9 @@
 
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle4 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle5 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle6 = new System.Windows.Forms.DataGridViewCellStyle();
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle10 = new System.Windows.Forms.DataGridViewCellStyle();
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle11 = new System.Windows.Forms.DataGridViewCellStyle();
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle12 = new System.Windows.Forms.DataGridViewCellStyle();
             this.panel_TopBar = new System.Windows.Forms.Panel();
             this.label_AppTitle = new System.Windows.Forms.Label();
             this.label_AppSubtitle = new System.Windows.Forms.Label();
@@ -27,6 +27,10 @@
             this.label_UrlTitle = new System.Windows.Forms.Label();
             this.textBox_Url = new System.Windows.Forms.TextBox();
             this.panel_ScanBar = new System.Windows.Forms.Panel();
+            this.label1 = new System.Windows.Forms.Label();
+            this.textBox_SampleInjection = new System.Windows.Forms.TextBox();
+            this.label_SampleXssTitle = new System.Windows.Forms.Label();
+            this.textBox_SampleXss = new System.Windows.Forms.TextBox();
             this.button_Scan = new System.Windows.Forms.Button();
             this.button_Stop = new System.Windows.Forms.Button();
             this.label_ScanInfo = new System.Windows.Forms.Label();
@@ -37,8 +41,6 @@
             this.colResponse = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.label_Output = new System.Windows.Forms.Label();
             this.progressBar_Scan = new System.Windows.Forms.ProgressBar();
-            this.label1 = new System.Windows.Forms.Label();
-            this.textBox_SampleInjection = new System.Windows.Forms.TextBox();
             this.panel_TopBar.SuspendLayout();
             this.panel_UrlBar.SuspendLayout();
             this.panel_ScanBar.SuspendLayout();
@@ -167,14 +169,66 @@
             this.panel_ScanBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
             this.panel_ScanBar.Controls.Add(this.label1);
             this.panel_ScanBar.Controls.Add(this.textBox_SampleInjection);
+            this.panel_ScanBar.Controls.Add(this.label_SampleXssTitle);
+            this.panel_ScanBar.Controls.Add(this.textBox_SampleXss);
             this.panel_ScanBar.Controls.Add(this.button_Scan);
             this.panel_ScanBar.Controls.Add(this.button_Stop);
             this.panel_ScanBar.Controls.Add(this.label_ScanInfo);
             this.panel_ScanBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panel_ScanBar.Location = new System.Drawing.Point(0, 116);
             this.panel_ScanBar.Name = "panel_ScanBar";
-            this.panel_ScanBar.Size = new System.Drawing.Size(1200, 50);
+            this.panel_ScanBar.Size = new System.Drawing.Size(1200, 80);
             this.panel_ScanBar.TabIndex = 1;
+            // 
+            // label1
+            // 
+            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(190)))), ((int)(((byte)(24)))), ((int)(((byte)(93)))));
+            this.label1.Location = new System.Drawing.Point(842, 11);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(44, 20);
+            this.label1.TabIndex = 20;
+            this.label1.Text = "SQLi:";
+            // 
+            // textBox_SampleInjection
+            // 
+            this.textBox_SampleInjection.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBox_SampleInjection.BackColor = System.Drawing.Color.White;
+            this.textBox_SampleInjection.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.textBox_SampleInjection.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.textBox_SampleInjection.Location = new System.Drawing.Point(892, 9);
+            this.textBox_SampleInjection.Name = "textBox_SampleInjection";
+            this.textBox_SampleInjection.ReadOnly = true;
+            this.textBox_SampleInjection.Size = new System.Drawing.Size(288, 26);
+            this.textBox_SampleInjection.TabIndex = 19;
+            this.textBox_SampleInjection.Text = "\' OR \'1\'=\'1";
+            // 
+            // label_SampleXssTitle
+            // 
+            this.label_SampleXssTitle.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label_SampleXssTitle.AutoSize = true;
+            this.label_SampleXssTitle.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.label_SampleXssTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
+            this.label_SampleXssTitle.Location = new System.Drawing.Point(847, 40);
+            this.label_SampleXssTitle.Name = "label_SampleXssTitle";
+            this.label_SampleXssTitle.Size = new System.Drawing.Size(39, 20);
+            this.label_SampleXssTitle.TabIndex = 23;
+            this.label_SampleXssTitle.Text = "XSS:";
+            // 
+            // textBox_SampleXss
+            // 
+            this.textBox_SampleXss.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBox_SampleXss.BackColor = System.Drawing.Color.White;
+            this.textBox_SampleXss.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.textBox_SampleXss.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.textBox_SampleXss.Location = new System.Drawing.Point(892, 38);
+            this.textBox_SampleXss.Name = "textBox_SampleXss";
+            this.textBox_SampleXss.ReadOnly = true;
+            this.textBox_SampleXss.Size = new System.Drawing.Size(288, 26);
+            this.textBox_SampleXss.TabIndex = 24;
+            this.textBox_SampleXss.Text = "<script>alert(\'xss\')</script>";
             // 
             // button_Scan
             // 
@@ -228,42 +282,42 @@
             this.panel_Output.Controls.Add(this.label_Output);
             this.panel_Output.Controls.Add(this.progressBar_Scan);
             this.panel_Output.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel_Output.Location = new System.Drawing.Point(0, 166);
+            this.panel_Output.Location = new System.Drawing.Point(0, 196);
             this.panel_Output.Name = "panel_Output";
             this.panel_Output.Padding = new System.Windows.Forms.Padding(12, 8, 12, 8);
-            this.panel_Output.Size = new System.Drawing.Size(1200, 534);
+            this.panel_Output.Size = new System.Drawing.Size(1200, 504);
             this.panel_Output.TabIndex = 0;
             // 
             // dataGridView_Output
             // 
             this.dataGridView_Output.AllowUserToAddRows = false;
             this.dataGridView_Output.AllowUserToDeleteRows = false;
-            dataGridViewCellStyle4.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(30)))), ((int)(((byte)(48)))));
-            this.dataGridView_Output.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle4;
+            dataGridViewCellStyle10.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(30)))), ((int)(((byte)(48)))));
+            this.dataGridView_Output.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle10;
             this.dataGridView_Output.BackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
             this.dataGridView_Output.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.dataGridView_Output.CellBorderStyle = System.Windows.Forms.DataGridViewCellBorderStyle.SingleHorizontal;
             this.dataGridView_Output.ClipboardCopyMode = System.Windows.Forms.DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
             this.dataGridView_Output.ColumnHeadersBorderStyle = System.Windows.Forms.DataGridViewHeaderBorderStyle.Single;
-            dataGridViewCellStyle5.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            dataGridViewCellStyle5.Font = new System.Drawing.Font("Segoe UI", 9F);
-            dataGridViewCellStyle5.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
-            dataGridViewCellStyle5.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
-            dataGridViewCellStyle5.SelectionForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
-            this.dataGridView_Output.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle5;
+            dataGridViewCellStyle11.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
+            dataGridViewCellStyle11.Font = new System.Drawing.Font("Segoe UI", 9F);
+            dataGridViewCellStyle11.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
+            dataGridViewCellStyle11.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
+            dataGridViewCellStyle11.SelectionForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
+            this.dataGridView_Output.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle11;
             this.dataGridView_Output.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dataGridView_Output.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.colName,
             this.colStatus,
             this.colResponse});
-            dataGridViewCellStyle6.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle6.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
-            dataGridViewCellStyle6.Font = new System.Drawing.Font("Segoe UI", 9F);
-            dataGridViewCellStyle6.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(232)))), ((int)(((byte)(240)))));
-            dataGridViewCellStyle6.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(58)))), ((int)(((byte)(138)))));
-            dataGridViewCellStyle6.SelectionForeColor = System.Drawing.Color.White;
-            dataGridViewCellStyle6.WrapMode = System.Windows.Forms.DataGridViewTriState.False;
-            this.dataGridView_Output.DefaultCellStyle = dataGridViewCellStyle6;
+            dataGridViewCellStyle12.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
+            dataGridViewCellStyle12.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
+            dataGridViewCellStyle12.Font = new System.Drawing.Font("Segoe UI", 9F);
+            dataGridViewCellStyle12.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(232)))), ((int)(((byte)(240)))));
+            dataGridViewCellStyle12.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(58)))), ((int)(((byte)(138)))));
+            dataGridViewCellStyle12.SelectionForeColor = System.Drawing.Color.White;
+            dataGridViewCellStyle12.WrapMode = System.Windows.Forms.DataGridViewTriState.False;
+            this.dataGridView_Output.DefaultCellStyle = dataGridViewCellStyle12;
             this.dataGridView_Output.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dataGridView_Output.GridColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(41)))), ((int)(((byte)(59)))));
             this.dataGridView_Output.Location = new System.Drawing.Point(12, 28);
@@ -272,7 +326,7 @@
             this.dataGridView_Output.RowHeadersVisible = false;
             this.dataGridView_Output.RowHeadersWidth = 51;
             this.dataGridView_Output.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dataGridView_Output.Size = new System.Drawing.Size(1176, 494);
+            this.dataGridView_Output.Size = new System.Drawing.Size(1176, 464);
             this.dataGridView_Output.TabIndex = 0;
             this.dataGridView_Output.MouseDown += new System.Windows.Forms.MouseEventHandler(this.dataGridView_Output_MouseDown);
             // 
@@ -315,35 +369,11 @@
             // progressBar_Scan
             // 
             this.progressBar_Scan.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.progressBar_Scan.Location = new System.Drawing.Point(12, 522);
+            this.progressBar_Scan.Location = new System.Drawing.Point(12, 492);
             this.progressBar_Scan.MarqueeAnimationSpeed = 30;
             this.progressBar_Scan.Name = "progressBar_Scan";
             this.progressBar_Scan.Size = new System.Drawing.Size(1176, 4);
             this.progressBar_Scan.TabIndex = 2;
-            // 
-            // label1
-            // 
-            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.label1.AutoSize = true;
-            this.label1.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(190)))), ((int)(((byte)(24)))), ((int)(((byte)(93)))));
-            this.label1.Location = new System.Drawing.Point(897, 12);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(112, 20);
-            this.label1.TabIndex = 20;
-            this.label1.Text = "Sample : Script";
-            // 
-            // textBox_SampleInjection
-            // 
-            this.textBox_SampleInjection.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.textBox_SampleInjection.BackColor = System.Drawing.Color.White;
-            this.textBox_SampleInjection.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.textBox_SampleInjection.Font = new System.Drawing.Font("Consolas", 10F);
-            this.textBox_SampleInjection.Location = new System.Drawing.Point(1015, 8);
-            this.textBox_SampleInjection.Name = "textBox_SampleInjection";
-            this.textBox_SampleInjection.Size = new System.Drawing.Size(165, 27);
-            this.textBox_SampleInjection.TabIndex = 19;
-            this.textBox_SampleInjection.Text = "\' OR \'1\'=\'1";
             // 
             // SqlInjectionForm
             // 
@@ -398,5 +428,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colResponse;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.TextBox textBox_SampleInjection;
+        private System.Windows.Forms.Label label_SampleXssTitle;
+        private System.Windows.Forms.TextBox textBox_SampleXss;
     }
 }
