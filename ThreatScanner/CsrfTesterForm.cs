@@ -1,11 +1,15 @@
-﻿using System;
+﻿using Microsoft.Playwright;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ThreatScanner.Helpers;
@@ -14,6 +18,21 @@ namespace ThreatScanner
 {
     public partial class CsrfTesterForm : Form
     {
+
+        // ── Constants ─────────────────────────────────────────────────────────
+        private const string CDP_ENDPOINT = "http://localhost:65535";
+        private const string EDGE_PATH_X86 = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
+        private const string EDGE_PATH_X64 = @"C:\Program Files\Microsoft\Edge\Application\msedge.exe";
+        private const string EDGE_SESSION = @"C:\EdgeSession";
+
+        // Persistent browser session variables
+        private IPlaywright _playwright;
+        private IBrowser _browser;
+        private IPage _activePage;
+
+
+
+        private static readonly HttpClient CdpHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         private HttpClient _client;
 
         // Stores the last auto-detected form fields (including hidden/token fields)
@@ -32,24 +51,77 @@ namespace ThreatScanner
 
         // ─── HTTP CLIENT ──────────────────────────────────────────────────────────
 
+        // Add this class-level field to track the cookie container
+        private CookieContainer _cookieJar;
+
         private void ResetClient()
         {
             _client?.Dispose();
-            var jar = new CookieContainer();
+            _cookieJar = new CookieContainer(); // Store reference to update dynamically
+
             var handler = new HttpClientHandler
             {
-                CookieContainer = jar,
+                CookieContainer = _cookieJar,
                 UseCookies = true,
                 AllowAutoRedirect = false
             };
+
             _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
             _client.DefaultRequestHeaders.Add("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreatScanner/1.0");
         }
+        private async Task SyncClientCookiesFromCdpAsync(string url)
+        {
+            try
+            {
+                // Get or connect to the active Playwright/CDP page
+                IPage page = await GetOrCreateActivePageAsync();
 
+                // Fetch cookies from the current browser context for the specified domain
+                var contextCookies = await page.Context.CookiesAsync(new[] { url });
+
+                if (contextCookies != null && _cookieJar != null)
+                {
+                    var uri = new Uri(url);
+                    foreach (var c in contextCookies)
+                    {
+                        var cookie = new System.Net.Cookie(c.Name, c.Value)
+                        {
+                            Domain = string.IsNullOrEmpty(c.Domain) ? uri.Host : c.Domain,
+                            Path = string.IsNullOrEmpty(c.Path) ? "/" : c.Path,
+                            Secure = c.Secure,
+                            HttpOnly = c.HttpOnly
+                        };
+
+                        _cookieJar.Add(uri, cookie);
+                    }
+                    Log("🍪", $"Synchronized {contextCookies.Count} cookie(s) from CDP to HttpClient.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("❌", "Failed to sync cookies from CDP: " + ex.Message);
+            }
+        }
         // ─── LOGGING ─────────────────────────────────────────────────────────────
 
         private void Log(string icon, string msg) => ScanHelpers.LogRtb(richTextBox_Output, icon, msg);
+
+        private void Log(string message, Color? color = null)
+        {
+            if (richTextBox_Output.InvokeRequired)
+            {
+                richTextBox_Output.Invoke(new Action<string, Color?>(Log), message, color);
+                return;
+            }
+
+            richTextBox_Output.SelectionStart = richTextBox_Output.TextLength;
+            richTextBox_Output.SelectionLength = 0;
+            richTextBox_Output.SelectionColor = color.HasValue ? color.Value : Color.FromArgb(212, 212, 212);
+            richTextBox_Output.AppendText(string.Format("[{0:HH:mm:ss}]  {1}\r\n", DateTime.Now, message));
+            richTextBox_Output.ScrollToCaret();
+        }
+
         private void LogSep() => ScanHelpers.LogSeparatorRtb(richTextBox_Output);
         private void ClearOut() => ScanHelpers.ClearOutputRtb(richTextBox_Output);
 
@@ -76,7 +148,7 @@ namespace ThreatScanner
             }
 
             string url = ScanHelpers.NormalizeUrl(rawUrl);
-            ResetClient();
+            ResetClient(); // Clears the client and sets up a fresh, empty cookie container
 
             button_AutoFill.Enabled = false;
             SetProgress(true);
@@ -91,6 +163,12 @@ namespace ThreatScanner
                     string html = null;
                     try
                     {
+                        // ── ADD THIS LINE HERE ───────────────────────────────────────
+                        // Pull active session cookies from the live browser via CDP
+                        // and inject them into the freshly reset HttpClient handler.
+                        await SyncClientCookiesFromCdpAsync(url);
+                        // ─────────────────────────────────────────────────────────────
+
                         var resp = await _client.GetAsync(url);
                         html = await resp.Content.ReadAsStringAsync();
                     }
@@ -127,7 +205,6 @@ namespace ThreatScanner
                     _detectedFramework = fw;
 
                     // ── Find the first POST form ──────────────────────────────────
-                    // Try to find a login/auth form first, else fall back to first POST form
                     var formMatch = FindBestForm(html);
                     if (formMatch == null)
                     {
@@ -162,7 +239,7 @@ namespace ThreatScanner
                         fields.Add(new KeyValuePair<string, string>(name, val));
                     }
 
-                    // All <select> tags — pick first <option>
+                    // All <select> tags
                     foreach (Match m in Regex.Matches(formHtml, @"<select[^>]*>[\s\S]*?</select>", RegexOptions.IgnoreCase))
                     {
                         string tag = m.Value;
@@ -187,12 +264,11 @@ namespace ThreatScanner
 
                     // ── Identify which fields are CSRF tokens ─────────────────────
                     var csrfTokenNames = new[] {
-                        "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
-                        "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
-                    };
+                "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
+                "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
+            };
 
                     // ── Build the body text for the textbox ───────────────────────
-                    // Group: hidden/token fields first, then user-facing fields
                     var bodyLines = new List<string>();
                     var tokenFields = new List<string>();
                     var userFields = new List<string>();
@@ -201,13 +277,12 @@ namespace ThreatScanner
                     {
                         bool isToken = csrfTokenNames.Any(t =>
                             kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
-                        // ASP.NET WebForms hidden system fields
                         bool isHidden = kv.Key.StartsWith("__", StringComparison.Ordinal);
 
                         if (isToken || isHidden)
                             tokenFields.Add($"{kv.Key}={kv.Value}");
                         else
-                            userFields.Add($"{kv.Key}=");   // leave user fields blank for tester to fill
+                            userFields.Add($"{kv.Key}=");
                     }
 
                     bodyLines.Add("# ── Hidden / Framework fields (auto-filled) ──");
@@ -220,7 +295,6 @@ namespace ThreatScanner
 
                     Invoke((Action)(() =>
                     {
-                        // Populate the Forge tab
                         textBox_ForgeBody.Text = bodyText;
                         textBox_ForgeUrl.Text = _detectedAction;
                         comboBox_Method.SelectedItem = "POST";
@@ -230,7 +304,6 @@ namespace ThreatScanner
                         Log("✅", $"Fields found: {fields.Count}");
                         LogSep();
 
-                        // Summarise what was found
                         foreach (var kv in fields)
                         {
                             bool isToken = csrfTokenNames.Any(t =>
@@ -248,7 +321,6 @@ namespace ThreatScanner
                         Log("ℹ️", "Body auto-filled in the Forge tab.");
                         Log("ℹ️", "Fill in the user fields (username/password/etc.) then click ⚡ Send Forged Request.");
 
-                        // Switch to Forge tab
                         tabControl_Main.SelectedTab = tabPage_Forge;
                     }));
                 });
@@ -340,30 +412,46 @@ namespace ThreatScanner
 
         // ─── STEP 1: FETCH + COOKIE FLAGS ────────────────────────────────────────
 
+        // ─── STEP 1: FETCH VIA CDP + COOKIE FLAGS ────────────────────────────────
         private async Task<string> FetchAndCheckCookies(string url)
         {
-            Invoke((Action)(() => Log("🍪", "── Cookie / SameSite Analysis ──────────────────────")));
+            Invoke((Action)(() => Log("🍪", "── Cookie / SameSite Analysis (CDP) ──────────────────")));
             try
             {
-                var resp = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, url));
-                string html = await resp.Content.ReadAsStringAsync();
+                // Connect to browser instance and navigate
+                IPage page = await GetOrCreateActivePageAsync();
 
-                IEnumerable<string> setCookies = Enumerable.Empty<string>();
-                if (resp.Headers.Contains("Set-Cookie"))
-                    setCookies = resp.Headers.GetValues("Set-Cookie");
+                Invoke((Action)(() => Log("🔄", $"Navigating to {url} via CDP...")));
+                await page.GotoAsync(url, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = 60000
+                });
+                await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = 30000 });
 
-                if (!setCookies.Any())
-                    Invoke((Action)(() => Log("ℹ️", "No Set-Cookie headers found on initial response.")));
+                // Get page HTML structure
+                string html = await page.ContentAsync();
+
+                // Fetch cookies via the Playwright Browser Context API
+                var contextCookies = await page.Context.CookiesAsync(new[] { url });
+
+                if (contextCookies == null || contextCookies.Count == 0)
+                {
+                    Invoke((Action)(() => Log("ℹ️", "No cookies found on response payload via CDP session.")));
+                }
                 else
                 {
-                    foreach (string cookie in setCookies)
+                    foreach (var cookie in contextCookies)
                     {
-                        string cookieName = cookie.Split('=')[0].Trim();
-                        bool hasHttpOnly = cookie.IndexOf("HttpOnly", StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool hasSecure = cookie.IndexOf("Secure", StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool hasSameSiteStrict = cookie.IndexOf("SameSite=Strict", StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool hasSameSiteLax = cookie.IndexOf("SameSite=Lax", StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool hasSameSiteNone = cookie.IndexOf("SameSite=None", StringComparison.OrdinalIgnoreCase) >= 0;
+                        string cookieName = cookie.Name;
+                        bool hasHttpOnly = cookie.HttpOnly;
+                        bool hasSecure = cookie.Secure;
+
+                        // Checking Playwright SameSite status mappings
+                        string sameSiteStr = cookie.SameSite.ToString();
+                        bool hasSameSiteStrict = sameSiteStr.Equals("Strict", StringComparison.OrdinalIgnoreCase);
+                        bool hasSameSiteLax = sameSiteStr.Equals("Lax", StringComparison.OrdinalIgnoreCase);
+                        bool hasSameSiteNone = sameSiteStr.Equals("None", StringComparison.OrdinalIgnoreCase);
 
                         Invoke((Action)(() =>
                         {
@@ -388,7 +476,7 @@ namespace ThreatScanner
             }
             catch (Exception ex)
             {
-                Invoke((Action)(() => Log("❌", "Cookie check failed: " + ex.Message)));
+                Invoke((Action)(() => Log("❌", "Cookie check via CDP failed: " + ex.Message)));
                 return null;
             }
         }
@@ -591,6 +679,7 @@ namespace ThreatScanner
                 await Task.Run(async () =>
                 {
                     ResetClient();
+                    await SyncClientCookiesFromCdpAsync(url);
                     var req = new HttpRequestMessage(new HttpMethod(method), url);
 
                     if (!string.IsNullOrEmpty(origin))
@@ -769,5 +858,98 @@ namespace ThreatScanner
         }
 
         private void button_ClearOutput_Click(object sender, EventArgs e) => ClearOut();
+
+
+
+        private void CsrfTesterForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Disconnect (but do not close) the CDP-attached Edge
+            try { _browser?.CloseAsync(); } catch { }
+            try { _playwright?.Dispose(); } catch { }
+        }
+
+        /// <summary>
+        /// Returns the live page to operate on. Connects to the
+        /// already-running Edge (via CDP) on first use and reuses the same page.
+        /// </summary>
+        private async Task<IPage> GetOrCreateActivePageAsync()
+        {
+            if (_activePage != null && !_activePage.IsClosed)
+                return _activePage;
+
+            await EnsureEdgeRunningAsync();
+
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Chromium.ConnectOverCDPAsync(CDP_ENDPOINT);
+            IBrowserContext context = _browser.Contexts[0];
+
+            IPage page = null;
+            foreach (IPage p in context.Pages)
+            {
+                if (p.Url.IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    page = p;
+                    break;
+                }
+            }
+            if (page == null)
+                page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
+
+            _activePage = page;
+            return _activePage;
+        }
+
+        private async Task EnsureEdgeRunningAsync()
+        {
+            if (await IsCdpReady()) { Log("[Edge] Already connected via CDP."); return; }
+
+            string edgePath = GetEdgePath();
+            if (edgePath == null)
+            {
+                Log("[Edge] msedge.exe not found. Launch Edge manually with --remote-debugging-port=65535", Color.OrangeRed);
+                return;
+            }
+
+            Log("[Edge] Closing existing Edge instances ...");
+            foreach (Process proc in Process.GetProcessesByName("msedge"))
+            {
+                try { proc.Kill(); proc.WaitForExit(2000); } catch { }
+            }
+            await Task.Delay(2500);
+
+            Log("[Edge] Launching Edge with remote debugging on port 65535 ...");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = edgePath,
+                Arguments = "--remote-debugging-port=65535 --user-data-dir=\"" + EDGE_SESSION + "\" --no-first-run --no-default-browser-check",
+                UseShellExecute = true
+            });
+
+            Log("[Edge] Waiting for Edge to be ready ...", Color.Yellow);
+            for (int i = 0; i < 20; i++)
+            {
+                await Task.Delay(1000);
+                if (await IsCdpReady()) { Log("[Edge] Ready!", Color.LightGreen); return; }
+            }
+            Log("[Edge] Edge did not respond in time - trying anyway.", Color.OrangeRed);
+        }
+        private static async Task<bool> IsCdpReady()
+        {
+            try
+            {
+                using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    HttpResponseMessage res = await CdpHttpClient.GetAsync(CDP_ENDPOINT + "/json/version", cts.Token);
+                    return res.IsSuccessStatusCode;
+                }
+            }
+            catch { return false; }
+        }
+        private static string GetEdgePath()
+        {
+            if (File.Exists(EDGE_PATH_X86)) return EDGE_PATH_X86;
+            if (File.Exists(EDGE_PATH_X64)) return EDGE_PATH_X64;
+            return null;
+        }
     }
 }

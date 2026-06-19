@@ -120,6 +120,7 @@
     <Compile Include="Helpers\HtmlHelpers.cs" />
     <Compile Include="Helpers\JsonEditorHelper.cs" />
     <Compile Include="Helpers\ScanHelpers.cs" />
+    <Compile Include="Helpers\SessionDetectionHelper.cs" />
     <Compile Include="Helpers\SqlInjectionHelper.cs" />
     <Compile Include="Helpers\XssHelper.cs" />
     <Compile Include="MainForm.cs">
