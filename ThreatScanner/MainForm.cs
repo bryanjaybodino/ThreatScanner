@@ -48,5 +48,10 @@ namespace ThreatScanner
         {
             new SubdomainScannerForm().Show();
         }
+
+        private void button_OpenSqlInjection_Click(object sender, EventArgs e)
+        {
+            new SqlInjectionForm().Show();
+        }
     }
 }

@@ -124,6 +124,10 @@ namespace ThreatScanner
                     await CheckCookieFlags(url);
                     await CheckRedirects(url);
                     await CheckSqlInjectionHints(url);
+
+                    // SQLi probe against any <form> fields on the page
+                    await ProbeForms(url, ct);
+
                     await CheckXssHints(url);
                     await CheckOpenPorts(url);
 
@@ -298,6 +302,148 @@ namespace ThreatScanner
                     AddRow("XSS Probe", "✅ Not reflected", "Basic probe not reflected");
             }
             catch (Exception ex) { AddRow("XSS Probe", "❌ Error", ex.Message); }
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        //  SQLI PROBE: HTML FORMS ON THE PAGE
+        //
+        //  Same passive, single-request error-disclosure check as
+        //  CheckSqlInjectionHints above, but applied to each <form> discovered
+        //  on the page. Injects a single quote into one text-like field at a
+        //  time (keeping every other field, including CSRF tokens, at its
+        //  normal auto-filled value) and submits via the form's real method
+        //  (GET/POST) and action URL. One request per field — no payload
+        //  chaining, no blind/time-based confirmation, no data extraction.
+        // ════════════════════════════════════════════════════════════════════════
+
+        private static readonly string[] SqlErrorSignatures = {
+            "sql syntax", "mysql_fetch", "mysqli_", "you have an error in your sql syntax",
+            "microsoft ole db", "odbc sql server driver", "unclosed quotation mark",
+            "sqlstate", "incorrect syntax near",
+            "ora-00933", "ora-01756", "ora-",
+            "pg_query", "warning: pg_", "postgresql query failed",
+            "sqlite3.operationalerror", "sqlite_error", "sqlite",
+            "syntax error", "unterminated string", "quoted string not properly terminated"
+        };
+
+        private async Task ProbeForms(string url, CancellationToken ct)
+        {
+            AddSep("Form SQLi Probe");
+            AddRow("Form Probe", "🔍 Starting", $"Fetching {url} to discover forms…");
+
+            string html;
+            try
+            {
+                var resp = await _http.GetAsync(url, ct);
+                html = await resp.Content.ReadAsStringAsync();
+            }
+            catch (Exception ex)
+            {
+                AddRow("Form Fetch", "❌ Error", ex.Message);
+                return;
+            }
+
+            var forms = FormParsingHelper.ParseForms(html, url);
+            if (forms.Count == 0)
+            {
+                AddRow("Forms", "ℹ️ None found", "No <form> elements detected on this page.");
+                AddRow("Form Probe", "✅ Complete", "No forms to test.");
+                return;
+            }
+
+            AddRow("Forms", "ℹ️ Found", $"{forms.Count} form(s) detected — testing text-like fields one at a time.");
+
+            int fieldsTested = 0;
+            foreach (var form in forms)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                AddRow($"Form: {(string.IsNullOrWhiteSpace(form.Name) ? $"#{form.Index + 1}" : form.Name)}",
+                    "ℹ️ Info",
+                    $"{form.Method.ToUpper()} {form.Action} ({form.Fields.Count} fields, framework: {form.Framework})");
+
+                var textFields = form.Fields
+                    .Where(f => !f.IsCsrfToken &&
+                                (f.Type == "text" || f.Type == "email" || f.Type == "search" ||
+                                 f.Type == "password" || f.Type == "textarea" || f.Type == "tel" ||
+                                 f.Type == "url" || string.IsNullOrEmpty(f.Type)))
+                    .ToList();
+
+                if (textFields.Count == 0)
+                {
+                    AddRow(form.ToString(), "ℹ️ Skipped", "No text-like fields to test.");
+                    continue;
+                }
+
+                foreach (var field in textFields)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    await ProbeFormField(form, field, ct);
+                    fieldsTested++;
+                }
+            }
+
+            AddRow("Form Probe", "✅ Complete", $"Tested {fieldsTested} field(s) across {forms.Count} form(s).");
+        }
+
+        private async Task ProbeFormField(
+            FormParsingHelper.FormInfo form, FormParsingHelper.FormField targetField, CancellationToken ct)
+        {
+            // Inject the probe payload into the target field only; keep every other
+            // field's auto-filled / existing value (incl. CSRF tokens) so the request
+            // looks like a normal form submission.
+            var originalValue = targetField.Value;
+            targetField.Value = (originalValue ?? "") + "'";
+            string label = $"Form field: {targetField.Name}";
+
+            try
+            {
+                 var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                 var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, cts.Token);
+
+                HttpResponseMessage resp;
+                if (form.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+                {
+                    string qs = FormParsingHelper.BuildRequestBody(form, includeCsrfTokens: true);
+                    string getUrl = form.Action.Contains("?") ? $"{form.Action}&{qs}" : $"{form.Action}?{qs}";
+                    resp = await _http.GetAsync(getUrl, linked.Token);
+                }
+                else
+                {
+                    string body = FormParsingHelper.BuildRequestBody(form, includeCsrfTokens: true);
+                    var content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded");
+                    resp = await _http.PostAsync(form.Action, content, linked.Token);
+                }
+
+                string respBody = await resp.Content.ReadAsStringAsync();
+                var matched = SqlErrorSignatures.FirstOrDefault(err =>
+                    respBody.IndexOf(err, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if (matched != null)
+                {
+                    AddRow(label, "🚨 Possible SQLi",
+                        $"DB error signature \"{matched}\" found. Likely unsanitized input reaching a SQL query. " +
+                        "Fix: use parameterized queries / prepared statements, never concatenate user input into SQL; " +
+                        "disable detailed error pages in production.");
+                }
+                else
+                {
+                    AddRow(label, "✅ No disclosure",
+                        "No known DB error patterns found. Passive check only — does not rule out blind/second-order injection.");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                AddRow(label, "⚠️ Timeout", $"Request to {form.Action} timed out.");
+            }
+            catch (Exception ex)
+            {
+                AddRow(label, "❌ Error", ex.Message);
+            }
+            finally
+            {
+                targetField.Value = originalValue; // restore for next field's probe
+            }
         }
 
         private async Task CheckOpenPorts(string url)

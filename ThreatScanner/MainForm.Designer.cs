@@ -32,6 +32,8 @@
             this.label_AutoFillDesc = new System.Windows.Forms.Label();
             this.button_OpenSubdomainScanner = new System.Windows.Forms.Button();
             this.label_SubdomainDesc = new System.Windows.Forms.Label();
+            this.button_OpenSqlInjection = new System.Windows.Forms.Button();
+            this.label_SqlInjectionDesc = new System.Windows.Forms.Label();
             this.label_Disclaimer = new System.Windows.Forms.Label();
             this.panel_TopBar.SuspendLayout();
             this.panel_Cards.SuspendLayout();
@@ -87,6 +89,8 @@
             this.panel_Cards.Controls.Add(this.label_AutoFillDesc);
             this.panel_Cards.Controls.Add(this.button_OpenSubdomainScanner);
             this.panel_Cards.Controls.Add(this.label_SubdomainDesc);
+            this.panel_Cards.Controls.Add(this.button_OpenSqlInjection);
+            this.panel_Cards.Controls.Add(this.label_SqlInjectionDesc);
             this.panel_Cards.Controls.Add(this.label_Disclaimer);
             this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_Cards.Location = new System.Drawing.Point(0, 80);
@@ -298,6 +302,35 @@
             this.label_SubdomainDesc.Text = "Discover subdomains via CT logs, then probe each one live";
             this.label_SubdomainDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
+            // button_OpenSqlInjection
+            // 
+            this.button_OpenSqlInjection.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.button_OpenSqlInjection.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(190)))), ((int)(((byte)(24)))), ((int)(((byte)(93)))));
+            this.button_OpenSqlInjection.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button_OpenSqlInjection.FlatAppearance.BorderSize = 0;
+            this.button_OpenSqlInjection.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_OpenSqlInjection.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this.button_OpenSqlInjection.ForeColor = System.Drawing.Color.White;
+            this.button_OpenSqlInjection.Location = new System.Drawing.Point(1110, 240);
+            this.button_OpenSqlInjection.Name = "button_OpenSqlInjection";
+            this.button_OpenSqlInjection.Size = new System.Drawing.Size(330, 100);
+            this.button_OpenSqlInjection.TabIndex = 15;
+            this.button_OpenSqlInjection.Text = "🛡️  SQL Injection";
+            this.button_OpenSqlInjection.UseVisualStyleBackColor = false;
+            this.button_OpenSqlInjection.Click += new System.EventHandler(this.button_OpenSqlInjection_Click);
+            // 
+            // label_SqlInjectionDesc
+            // 
+            this.label_SqlInjectionDesc.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.label_SqlInjectionDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label_SqlInjectionDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label_SqlInjectionDesc.Location = new System.Drawing.Point(1110, 350);
+            this.label_SqlInjectionDesc.Name = "label_SqlInjectionDesc";
+            this.label_SqlInjectionDesc.Size = new System.Drawing.Size(330, 50);
+            this.label_SqlInjectionDesc.TabIndex = 16;
+            this.label_SqlInjectionDesc.Text = "Passive error-disclosure check\nwith remediation guidance";
+            this.label_SqlInjectionDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // label_Disclaimer
             // 
             this.label_Disclaimer.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -350,6 +383,8 @@
         private System.Windows.Forms.Label label_AutoFillDesc;
         private System.Windows.Forms.Button button_OpenSubdomainScanner;
         private System.Windows.Forms.Label label_SubdomainDesc;
+        private System.Windows.Forms.Button button_OpenSqlInjection;
+        private System.Windows.Forms.Label label_SqlInjectionDesc;
         private System.Windows.Forms.Label label_Disclaimer;
     }
 }
