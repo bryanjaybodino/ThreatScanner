@@ -21,8 +21,8 @@ namespace ThreatScanner
     {
         // ── UI batching ──────────────────────────────────────────────────────
         // Worker threads enqueue log entries; the UI timer drains them all in
-        // one SuspendLayout/ResumeLayout pass.  This mirrors the exact pattern
-        // used in WebSocketForm and avoids per-row Invoke + per-row repaint.
+        // one batch via ScanHelpers' scroll-preserving append, mirroring the
+        // pattern AutoFillForm uses for LogRtbColor.
         private readonly ConcurrentQueue<PendingRow> _pendingRows = new ConcurrentQueue<PendingRow>();
         private readonly System.Windows.Forms.Timer _flushTimer = new System.Windows.Forms.Timer { Interval = 75 };
         private const int MaxRows = 2000;
@@ -62,47 +62,31 @@ namespace ThreatScanner
         private void LogSep() => Log("", new string('─', 60));
 
         /// <summary>
-        /// Drains the pending-row queue and appends all entries to the ListBox
-        /// in a single BeginUpdate/EndUpdate pass.  Runs on the UI thread only
+        /// Drains the pending-row queue and appends all entries to the
+        /// RichTextBox in one batch via ScanHelpers' scroll-preserving append —
+        /// the same mechanism AutoFillForm uses, so the user can scroll up and
+        /// stay there even while rows keep arriving. Runs on the UI thread only
         /// (called from the Timer.Tick event).
         /// </summary>
         private void FlushPendingRows()
         {
             if (_pendingRows.IsEmpty) return;
 
-            // Snapshot whether the list is already scrolled to the bottom so
-            // we can restore that behaviour without yanking the user away from
-            // rows they are reading.
-            bool wasAtBottom = listBox_Output.Items.Count == 0
-                || listBox_Output.TopIndex >= listBox_Output.Items.Count
-                   - listBox_Output.ClientSize.Height / listBox_Output.ItemHeight - 1;
+            var sb = new StringBuilder();
+            while (_pendingRows.TryDequeue(out var pr))
+                sb.AppendLine(ScanHelpers.FormatQueueRow(pr.Icon, pr.Message));
 
-            listBox_Output.BeginUpdate();
-            try
-            {
-                while (_pendingRows.TryDequeue(out var pr))
-                    listBox_Output.Items.Add(ScanHelpers.FormatQueueRow(pr.Icon, pr.Message));
+            ScanHelpers.AppendBatchPreservingScroll(richTextBox_Output, sb.ToString());
 
-                // Cap list size so a long fuzz run can't bloat memory/repaint cost.
-                int overflow = listBox_Output.Items.Count - MaxRows;
-                if (overflow > 0)
-                    for (int i = 0; i < overflow; i++)
-                        listBox_Output.Items.RemoveAt(0);
-            }
-            finally
-            {
-                listBox_Output.EndUpdate();
-            }
-
-            if (wasAtBottom && listBox_Output.Items.Count > 0)
-                listBox_Output.TopIndex = listBox_Output.Items.Count - 1;
+            // Cap box size so a long fuzz run can't bloat memory/repaint cost.
+            ScanHelpers.TrimToLastLinesPreservingScroll(richTextBox_Output, MaxRows);
         }
 
         private void ClearOut()
         {
             // Drain the queue first so stale rows don't reappear after a clear.
             while (_pendingRows.TryDequeue(out _)) { }
-            ScanHelpers.ClearOutput(listBox_Output);
+            richTextBox_Output.Clear();
         }
 
         private void SetProgress(bool running)
@@ -307,7 +291,7 @@ namespace ThreatScanner
 
         private void button_SaveReport_Click(object sender, EventArgs e)
         {
-            if (listBox_Output.Items.Count == 0)
+            if (richTextBox_Output.TextLength == 0)
             {
                 MessageBox.Show("No results to save.", "ThreatScanner",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -319,8 +303,7 @@ namespace ThreatScanner
                 FileName = $"BruteForce_Report_{DateTime.Now:yyyyMMdd_HHmmss}"
             };
             if (dlg.ShowDialog() == DialogResult.OK)
-                File.WriteAllLines(dlg.FileName,
-                    listBox_Output.Items.Cast<string>().ToArray(), Encoding.UTF8);
+                File.WriteAllText(dlg.FileName, richTextBox_Output.Text, Encoding.UTF8);
         }
 
         private void button_ClearOutput_Click(object sender, EventArgs e) => ClearOut();

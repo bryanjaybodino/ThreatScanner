@@ -33,7 +33,7 @@
             this.button_BruteForce = new System.Windows.Forms.Button();
             this.label_BruteInfo = new System.Windows.Forms.Label();
             this.panel_Output = new System.Windows.Forms.Panel();
-            this.listBox_Output = new System.Windows.Forms.ListBox();
+            this.richTextBox_Output = new System.Windows.Forms.RichTextBox();
             this.label_Output = new System.Windows.Forms.Label();
             this.progressBar_Scan = new System.Windows.Forms.ProgressBar();
             this.panel_TopBar.SuspendLayout();
@@ -270,7 +270,7 @@
             // panel_Output
             // 
             this.panel_Output.BackColor = System.Drawing.Color.White;
-            this.panel_Output.Controls.Add(this.listBox_Output);
+            this.panel_Output.Controls.Add(this.richTextBox_Output);
             this.panel_Output.Controls.Add(this.label_Output);
             this.panel_Output.Controls.Add(this.progressBar_Scan);
             this.panel_Output.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -280,19 +280,21 @@
             this.panel_Output.Size = new System.Drawing.Size(900, 464);
             this.panel_Output.TabIndex = 0;
             // 
-            // listBox_Output
+            // richTextBox_Output
             // 
-            this.listBox_Output.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
-            this.listBox_Output.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.listBox_Output.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.listBox_Output.Font = new System.Drawing.Font("Consolas", 9.5F);
-            this.listBox_Output.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(232)))), ((int)(((byte)(240)))));
-            this.listBox_Output.HorizontalScrollbar = true;
-            this.listBox_Output.ItemHeight = 19;
-            this.listBox_Output.Location = new System.Drawing.Point(12, 28);
-            this.listBox_Output.Name = "listBox_Output";
-            this.listBox_Output.Size = new System.Drawing.Size(876, 424);
-            this.listBox_Output.TabIndex = 0;
+            this.richTextBox_Output.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(23)))), ((int)(((byte)(42)))));
+            this.richTextBox_Output.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.richTextBox_Output.DetectUrls = false;
+            this.richTextBox_Output.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.richTextBox_Output.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.richTextBox_Output.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(232)))), ((int)(((byte)(240)))));
+            this.richTextBox_Output.Location = new System.Drawing.Point(12, 28);
+            this.richTextBox_Output.Name = "richTextBox_Output";
+            this.richTextBox_Output.ReadOnly = true;
+            this.richTextBox_Output.Size = new System.Drawing.Size(876, 424);
+            this.richTextBox_Output.TabIndex = 0;
+            this.richTextBox_Output.Text = "";
+            this.richTextBox_Output.WordWrap = false;
             // 
             // label_Output
             // 
@@ -364,7 +366,7 @@
         private System.Windows.Forms.Label label_BruteInfo;
         private System.Windows.Forms.Panel panel_Output;
         private System.Windows.Forms.Label label_Output;
-        private System.Windows.Forms.ListBox listBox_Output;
+        private System.Windows.Forms.RichTextBox richTextBox_Output;
         private System.Windows.Forms.ProgressBar progressBar_Scan;
     }
 }

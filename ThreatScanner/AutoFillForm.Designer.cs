@@ -24,6 +24,8 @@
             this.label_TargetUrl = new System.Windows.Forms.Label();
             this.textBox_TargetUrl = new System.Windows.Forms.TextBox();
             this.panel_ActionBar = new System.Windows.Forms.Panel();
+            this.label1 = new System.Windows.Forms.Label();
+            this.numericUpDown_Cycle = new System.Windows.Forms.NumericUpDown();
             this.label_Step3 = new System.Windows.Forms.Label();
             this.button_FillForm = new System.Windows.Forms.Button();
             this.checkBox_DryRun = new System.Windows.Forms.CheckBox();
@@ -47,17 +49,15 @@
             this.col_DetLabel = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.col_DetSelector = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.col_DetValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.label1 = new System.Windows.Forms.Label();
-            this.numericUpDown_Cycle = new System.Windows.Forms.NumericUpDown();
             this.panel_TopBar.SuspendLayout();
             this.panel_RequestBar.SuspendLayout();
             this.panel_ActionBar.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_DelayMs)).BeginInit();
             this.panel_Output.SuspendLayout();
             this.panel_AutoDetectBar.SuspendLayout();
             this.panel_Grid.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Detected)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).BeginInit();
             this.SuspendLayout();
             // 
             // panel_TopBar
@@ -187,6 +187,34 @@
             this.panel_ActionBar.Name = "panel_ActionBar";
             this.panel_ActionBar.Size = new System.Drawing.Size(1280, 62);
             this.panel_ActionBar.TabIndex = 2;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label1.Location = new System.Drawing.Point(764, 29);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(51, 20);
+            this.label1.TabIndex = 4;
+            this.label1.Text = "Cycle :";
+            // 
+            // numericUpDown_Cycle
+            // 
+            this.numericUpDown_Cycle.Location = new System.Drawing.Point(821, 28);
+            this.numericUpDown_Cycle.Maximum = new decimal(new int[] {
+            5000,
+            0,
+            0,
+            0});
+            this.numericUpDown_Cycle.Name = "numericUpDown_Cycle";
+            this.numericUpDown_Cycle.Size = new System.Drawing.Size(80, 27);
+            this.numericUpDown_Cycle.TabIndex = 5;
+            this.numericUpDown_Cycle.Value = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
             // 
             // label_Step3
             // 
@@ -453,34 +481,6 @@
             this.col_DetValue.MinimumWidth = 6;
             this.col_DetValue.Name = "col_DetValue";
             // 
-            // label1
-            // 
-            this.label1.AutoSize = true;
-            this.label1.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
-            this.label1.Location = new System.Drawing.Point(764, 29);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(51, 20);
-            this.label1.TabIndex = 4;
-            this.label1.Text = "Cycle :";
-            // 
-            // numericUpDown_Cycle
-            // 
-            this.numericUpDown_Cycle.Location = new System.Drawing.Point(821, 28);
-            this.numericUpDown_Cycle.Maximum = new decimal(new int[] {
-            5000,
-            0,
-            0,
-            0});
-            this.numericUpDown_Cycle.Name = "numericUpDown_Cycle";
-            this.numericUpDown_Cycle.Size = new System.Drawing.Size(80, 27);
-            this.numericUpDown_Cycle.TabIndex = 5;
-            this.numericUpDown_Cycle.Value = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            // 
             // AutoFillForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
@@ -504,6 +504,7 @@
             this.panel_RequestBar.PerformLayout();
             this.panel_ActionBar.ResumeLayout(false);
             this.panel_ActionBar.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_DelayMs)).EndInit();
             this.panel_Output.ResumeLayout(false);
             this.panel_Output.PerformLayout();
@@ -511,7 +512,6 @@
             this.panel_AutoDetectBar.PerformLayout();
             this.panel_Grid.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Detected)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
