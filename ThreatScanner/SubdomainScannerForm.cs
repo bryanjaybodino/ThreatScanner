@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -22,6 +24,14 @@ namespace ThreatScanner
     ///   - Wildcard-DNS detection so brute-force doesn't return false positives
     ///   - Live HTTP/HTTPS probing of every discovered subdomain (status + title)
     ///   - DataGridView output with Name / Status / Response columns (copyable)
+    ///
+    ///   PERFORMANCE NOTE:
+    ///   Row additions and progress updates no longer marshal to the UI thread
+    ///   one-at-a-time via BeginInvoke. Worker threads enqueue results into
+    ///   thread-safe queues, and a single UI Timer drains them in batches every
+    ///   100ms. This avoids flooding the UI message queue during high-throughput
+    ///   phases (DNS brute-force, HTTP probing), which previously caused the
+    ///   grid to become unresponsive / appear frozen.
     /// </summary>
     public partial class SubdomainScannerForm : Form
     {
@@ -43,7 +53,106 @@ namespace ThreatScanner
         private int _totalWork;
         private int _doneWork;
 
-        public SubdomainScannerForm() => InitializeComponent();
+        // ── Batched UI update plumbing ──────────────────────────────────────────
+        // Worker threads never touch the UI directly. They enqueue rows / set the
+        // pending percentage, and a single Timer tick drains everything in one
+        // shot. This keeps cross-thread marshalling to ~10 calls/sec regardless
+        // of how fast the scan is producing results.
+        private readonly ConcurrentQueue<(string name, string status, string response)> _pendingRows
+            = new ConcurrentQueue<(string name, string status, string response)>();
+        private System.Windows.Forms.Timer _uiFlushTimer;
+        private volatile int _pendingPct = -1; // -1 = no pending progress update
+
+        public SubdomainScannerForm()
+        {
+            InitializeComponent();
+            InitUiFlushTimer();
+            EnableDoubleBuffering(dataGridView_Output);
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        //  UI BATCHING
+        // ════════════════════════════════════════════════════════════════════════
+
+        private void InitUiFlushTimer()
+        {
+            _uiFlushTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            _uiFlushTimer.Tick += (s, e) => FlushPendingUi();
+            _uiFlushTimer.Start();
+        }
+
+        /// <summary>Runs on the UI thread every 100ms. Drains whatever rows have
+        /// piled up since the last tick and applies them in one batch, plus the
+        /// latest pending progress percentage (last-write-wins — intermediate
+        /// values are intentionally dropped, we only care about the latest).</summary>
+        private void FlushPendingUi()
+        {
+            if (!_pendingRows.IsEmpty)
+            {
+                dataGridView_Output.SuspendLayout();
+
+                bool wasAtBottom = dataGridView_Output.Rows.Count == 0
+                    || (dataGridView_Output.FirstDisplayedScrollingRowIndex >= 0
+                        && dataGridView_Output.FirstDisplayedScrollingRowIndex
+                           + dataGridView_Output.DisplayedRowCount(false)
+                           >= dataGridView_Output.Rows.Count - 2);
+
+                int lastIdx = -1;
+                while (_pendingRows.TryDequeue(out var item))
+                {
+                    int idx = dataGridView_Output.Rows.Add(item.name, item.status, item.response);
+                    var row = dataGridView_Output.Rows[idx];
+
+                    Color fore = Color.FromArgb(226, 232, 240);
+                    Color back = Color.FromArgb(15, 23, 42);
+
+                    if (item.status.StartsWith("🚨") || item.status.StartsWith("❌"))
+                        fore = Color.FromArgb(248, 113, 113);
+                    else if (item.status.StartsWith("⚠️"))
+                        fore = Color.FromArgb(251, 191, 36);
+                    else if (item.status.StartsWith("✅"))
+                        fore = Color.FromArgb(52, 211, 153);
+                    else if (item.status.StartsWith("ℹ️"))
+                        fore = Color.FromArgb(96, 165, 250);
+
+                    row.Cells["colStatus"].Style.ForeColor = fore;
+                    row.Cells["colStatus"].Style.BackColor = back;
+
+                    lastIdx = idx;
+                }
+
+                if (wasAtBottom && lastIdx >= 0)
+                    dataGridView_Output.FirstDisplayedScrollingRowIndex = lastIdx;
+
+                dataGridView_Output.ResumeLayout();
+            }
+
+            int pct = _pendingPct;
+            if (pct >= 0)
+            {
+                progressBar_Scan.Value = Math.Min(progressBar_Scan.Maximum, Math.Max(progressBar_Scan.Minimum, pct));
+                label_ScanInfo.Text = _totalWork > 0
+                    ? $"Progress: {_doneWork}/{_totalWork} ({pct}%)"
+                    : "Progress: idle";
+                _pendingPct = -1;
+            }
+        }
+
+        /// <summary>DataGridView.DoubleBuffered is protected; flip it via reflection.
+        /// Cuts down on flicker/redraw cost during heavy batch inserts.</summary>
+        private static void EnableDoubleBuffering(DataGridView dgv)
+        {
+            typeof(DataGridView)
+                .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(dgv, true, null);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _uiFlushTimer?.Stop();
+            _uiFlushTimer?.Dispose();
+            base.OnFormClosed(e);
+        }
 
         // ════════════════════════════════════════════════════════════════════════
         //  HELPERS
@@ -89,7 +198,8 @@ namespace ThreatScanner
 
             _doneWork = 0;
             _totalWork = 0;
-            UpdateProgressLabel();
+            _pendingPct = -1;
+            label_ScanInfo.Text = "Progress: idle";
         }
 
         /// <summary>Call once you know how many discrete steps the scan will perform
@@ -98,79 +208,24 @@ namespace ThreatScanner
         {
             _totalWork = Math.Max(1, total);
             Interlocked.Exchange(ref _doneWork, 0);
-            UpdateProgressLabel();
+            _pendingPct = 0; // picked up by the next timer tick
         }
 
-        /// <summary>Increment completed work by one unit and refresh the bar/label (thread-safe).</summary>
+        /// <summary>Increment completed work by one unit. Thread-safe, non-blocking —
+        /// just updates a counter and stashes the latest percentage for the UI
+        /// timer to pick up on its next tick. No per-call cross-thread marshalling.</summary>
         private void BumpProgress()
         {
             int done = Interlocked.Increment(ref _doneWork);
-            UpdateProgressLabel();
-
             int pct = _totalWork > 0 ? Math.Min(100, (int)(done * 100L / _totalWork)) : 0;
-
-            void Do() => progressBar_Scan.Value = pct;
-
-            if (progressBar_Scan.InvokeRequired)
-                progressBar_Scan.BeginInvoke((Action)Do);
-            else
-                Do();
+            _pendingPct = pct; // last-write-wins; intermediate values are fine to drop
         }
 
-        private void UpdateProgressLabel()
-        {
-            void Do() => label_ScanInfo.Text = _totalWork > 0
-                ? $"Progress: {_doneWork}/{_totalWork} ({Math.Min(100, _doneWork * 100 / _totalWork)}%)"
-                : "Progress: idle";
-
-            if (label_ScanInfo.InvokeRequired)
-                label_ScanInfo.BeginInvoke((Action)Do);
-            else
-                Do();
-        }
-
-        /// <summary>Add a row to the DataGridView (thread-safe, non-blocking).</summary>
+        /// <summary>Queue a row for the next UI flush tick (thread-safe, non-blocking,
+        /// never touches the UI thread directly).</summary>
         private void AddRow(string name, string status, string response)
         {
-            void Do()
-            {
-                // Only auto-scroll if the user is already looking at the bottom —
-                // otherwise we'd yank them away from rows they're reading, and we
-                // avoid an unconditional scroll/redraw on every single insert.
-                bool wasAtBottom = dataGridView_Output.Rows.Count == 0
-                    || (dataGridView_Output.FirstDisplayedScrollingRowIndex >= 0
-                        && dataGridView_Output.FirstDisplayedScrollingRowIndex
-                           + dataGridView_Output.DisplayedRowCount(false)
-                           >= dataGridView_Output.Rows.Count - 2);
-
-                int idx = dataGridView_Output.Rows.Add(name, status, response);
-                var row = dataGridView_Output.Rows[idx];
-
-                Color fore = Color.FromArgb(226, 232, 240);
-                Color back = Color.FromArgb(15, 23, 42);
-
-                if (status.StartsWith("🚨") || status.StartsWith("❌"))
-                { fore = Color.FromArgb(248, 113, 113); }
-                else if (status.StartsWith("⚠️"))
-                { fore = Color.FromArgb(251, 191, 36); }
-                else if (status.StartsWith("✅"))
-                { fore = Color.FromArgb(52, 211, 153); }
-                else if (status.StartsWith("ℹ️"))
-                { fore = Color.FromArgb(96, 165, 250); }
-
-                row.Cells["colStatus"].Style.ForeColor = fore;
-                row.Cells["colStatus"].Style.BackColor = back;
-
-                if (wasAtBottom)
-                    dataGridView_Output.FirstDisplayedScrollingRowIndex = idx;
-            }
-
-            // BeginInvoke is non-blocking — worker threads queue the UI update and
-            // move on immediately instead of stalling on the UI thread.
-            if (dataGridView_Output.InvokeRequired)
-                dataGridView_Output.BeginInvoke((Action)Do);
-            else
-                Do();
+            _pendingRows.Enqueue((name, status, response));
         }
 
         private void AddSep(string section)
@@ -190,6 +245,7 @@ namespace ThreatScanner
             }
 
             dataGridView_Output.Rows.Clear();
+            while (_pendingRows.TryDequeue(out _)) { /* drop any stale queued rows */ }
             _found.Clear();
             _wildcardIps = null;
             _cts = new CancellationTokenSource();
@@ -213,7 +269,12 @@ namespace ThreatScanner
 
                     // 2. Passive: Certificate Transparency logs — two independent
                     //    sources queried in parallel so one going down (rate-limit,
-                    //    outage) doesn't cost us coverage.
+                    //    outage, or just being slow) doesn't cost us coverage.
+                    //    NOTE: QueryCrtSh / QueryCertSpotter now swallow their own
+                    //    per-source failures (including HttpClient request
+                    //    timeouts) instead of rethrowing, so a slow/unavailable
+                    //    source can no longer take the other one down with it via
+                    //    Task.WhenAll's fail-fast behaviour.
                     var crtShTask = QueryCrtSh(domain, ct);
                     var certSpotterTask = QueryCertSpotter(domain, ct);
                     await Task.WhenAll(crtShTask, certSpotterTask);
@@ -232,8 +293,7 @@ namespace ThreatScanner
 
                     if (checkBox_IncludeRoot.Checked) allNames.Add(domain);
 
-                    Invoke((Action)(() =>
-                        AddSep($"Resolved Subdomains ({allNames.Count} unique across all sources)")));
+                    AddSep($"Resolved Subdomains ({allNames.Count} unique across all sources)");
 
                     // 5. Live HTTP/HTTPS probing of every resolved subdomain
                     if (checkBox_ProbeHttp.Checked)
@@ -260,13 +320,10 @@ namespace ThreatScanner
             }
             finally
             {
-                Invoke((Action)(() =>
-                {
-                    AddRow("DONE", "✅ Complete", $"Total subdomains found: {_found.Count}");
-                    button_Scan.Enabled = true;
-                    button_StopScan.Enabled = false;
-                    SetProgress(false);
-                }));
+                AddRow("DONE", "✅ Complete", $"Total subdomains found: {_found.Count}");
+                button_Scan.Enabled = true;
+                button_StopScan.Enabled = false;
+                SetProgress(false);
             }
         }
 
@@ -332,6 +389,11 @@ namespace ThreatScanner
         /// crt.sh exposes a public JSON search over Certificate Transparency logs.
         /// Any subdomain that ever had a TLS cert issued for it (Let's Encrypt,
         /// etc.) shows up here — including ones DNS brute-force would never guess.
+        ///
+        /// Only a *genuine* cancellation (ct.IsCancellationRequested == true)
+        /// propagates upward. A timeout or any other failure on this source alone
+        /// is logged and returns an empty list, letting the other source's
+        /// results survive.
         /// </summary>
         private async Task<List<string>> QueryCrtSh(string domain, CancellationToken ct)
         {
@@ -341,7 +403,11 @@ namespace ThreatScanner
             {
                 string url = $"https://crt.sh/?q=%25.{Uri.EscapeDataString(domain)}&output=json";
                 var req = new HttpRequestMessage(HttpMethod.Get, url);
-                var resp = await _http.SendAsync(req, ct);
+
+                var cts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts2.CancelAfter(TimeSpan.FromSeconds(30)); // crt.sh is slow — give it real room
+
+                var resp = await _http.SendAsync(req, cts2.Token);
 
                 if (!resp.IsSuccessStatusCode)
                 {
@@ -381,10 +447,21 @@ namespace ThreatScanner
 
                 AddRow("crt.sh", "✅ Complete", $"{names.Count} unique name(s) found in CT logs");
             }
-            catch (TaskCanceledException) { throw; }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Genuine user-initiated cancel (Stop button) — propagate so the
+                // outer scan loop unwinds cleanly instead of limping along.
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // cts2 fired its own 30s CancelAfter — this is a per-source timeout,
+                // NOT a real cancel (ct itself was never triggered). Log and move on.
+                AddRow("crt.sh", "⚠️ Timeout", "No response within 30s — falling back to CertSpotter + brute-force");
+            }
             catch (Exception ex)
             {
+                // JSON parse failures, DNS errors, etc.
                 AddRow("crt.sh", "❌ Error", ex.Message + " — falling back to CertSpotter + brute-force");
             }
             return names;
@@ -397,6 +474,11 @@ namespace ThreatScanner
         /// names than either alone, and keeps results flowing if one source is
         /// down or rate-limited. Unauthenticated requests are allowed at a modest
         /// rate for personal/evaluation use; no API key needed.
+        ///
+        /// Same cancellation handling as QueryCrtSh — only rethrow on a genuine
+        /// cancel (ct.IsCancellationRequested), not on a plain request timeout or
+        /// other per-source failure, so this source can't take the other one
+        /// down via Task.WhenAll.
         /// </summary>
         private async Task<List<string>> QueryCertSpotter(string domain, CancellationToken ct)
         {
@@ -454,8 +536,10 @@ namespace ThreatScanner
 
                 AddRow("CertSpotter", "✅ Complete", $"{names.Count} unique name(s) found in CT logs");
             }
-            catch (TaskCanceledException) { throw; }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 AddRow("CertSpotter", "❌ Error", ex.Message + " — continuing with other sources");
@@ -629,6 +713,7 @@ namespace ThreatScanner
         private void button_ClearOutput_Click(object sender, EventArgs e)
         {
             dataGridView_Output.Rows.Clear();
+            while (_pendingRows.TryDequeue(out _)) { /* drop any stale queued rows */ }
             _found.Clear();
         }
 
