@@ -47,6 +47,8 @@
             this.col_DetLabel = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.col_DetSelector = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.col_DetValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.label1 = new System.Windows.Forms.Label();
+            this.numericUpDown_Cycle = new System.Windows.Forms.NumericUpDown();
             this.panel_TopBar.SuspendLayout();
             this.panel_RequestBar.SuspendLayout();
             this.panel_ActionBar.SuspendLayout();
@@ -55,6 +57,7 @@
             this.panel_AutoDetectBar.SuspendLayout();
             this.panel_Grid.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Detected)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).BeginInit();
             this.SuspendLayout();
             // 
             // panel_TopBar
@@ -172,6 +175,8 @@
             // panel_ActionBar
             // 
             this.panel_ActionBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
+            this.panel_ActionBar.Controls.Add(this.label1);
+            this.panel_ActionBar.Controls.Add(this.numericUpDown_Cycle);
             this.panel_ActionBar.Controls.Add(this.label_Step3);
             this.panel_ActionBar.Controls.Add(this.button_FillForm);
             this.panel_ActionBar.Controls.Add(this.checkBox_DryRun);
@@ -448,6 +453,34 @@
             this.col_DetValue.MinimumWidth = 6;
             this.col_DetValue.Name = "col_DetValue";
             // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label1.Location = new System.Drawing.Point(764, 29);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(51, 20);
+            this.label1.TabIndex = 4;
+            this.label1.Text = "Cycle :";
+            // 
+            // numericUpDown_Cycle
+            // 
+            this.numericUpDown_Cycle.Location = new System.Drawing.Point(821, 28);
+            this.numericUpDown_Cycle.Maximum = new decimal(new int[] {
+            5000,
+            0,
+            0,
+            0});
+            this.numericUpDown_Cycle.Name = "numericUpDown_Cycle";
+            this.numericUpDown_Cycle.Size = new System.Drawing.Size(80, 27);
+            this.numericUpDown_Cycle.TabIndex = 5;
+            this.numericUpDown_Cycle.Value = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            // 
             // AutoFillForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
@@ -478,6 +511,7 @@
             this.panel_AutoDetectBar.PerformLayout();
             this.panel_Grid.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Detected)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericUpDown_Cycle)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -523,5 +557,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn col_DetLabel;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_DetSelector;
         private System.Windows.Forms.DataGridViewTextBoxColumn col_DetValue;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.NumericUpDown numericUpDown_Cycle;
     }
 }

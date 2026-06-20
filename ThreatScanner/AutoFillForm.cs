@@ -209,33 +209,172 @@ namespace ThreatScanner
 
             bool dryRun = checkBox_DryRun.Checked;
             int delayMs = (int)numericUpDown_DelayMs.Value;
+            int cycle = (int)numericUpDown_Cycle.Value;
 
-            SetRunning(true);
-            Log(string.Format("[Fill] Starting {0} on {1} ...", dryRun ? "DRY RUN" : "LIVE RUN", url));
+            for (int i = 0; i < cycle; i++)
+            {
+                SetRunning(true);
+                Log(string.Format("[Fill] Starting {0} on {1} ...", dryRun ? "DRY RUN" : "LIVE RUN", url));
 
-            _cts = new CancellationTokenSource();
+                _cts = new CancellationTokenSource();
+                try
+                {
+                    await FillAutoDetected(url, delayMs, _cts.Token);
+
+                    if (!dryRun)
+                        await SubmitFormAsync();
+                    else
+                        Log("[Fill] Dry run complete — form filled but NOT submitted.", Color.Yellow);
+
+                    Log("[Fill] Done.", Color.LightGreen);
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[Fill] Cancelled.", Color.Yellow);
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("[Fill] ERROR: {0}", ex.Message), Color.OrangeRed);
+                }
+                finally
+                {
+                    SetRunning(false);
+                }
+
+                // Return to the selected URL once the cycle is done, so the
+                // page is back at a known, fillable state instead of wherever
+                // SubmitFormAsync left us (a confirmation page, redirect, etc.)
+                // before either the next cycle starts, or the user clicks
+                // Fill/Detect again.
+                if (_cts.IsCancellationRequested) break;
+
+                try
+                {
+                    await Task.Delay(5000, _cts.Token);
+                    IPage page = await GetOrCreateActivePageAsync();
+                    if (page != null && !page.IsClosed)
+                    {
+                        if (!string.Equals(page.Url, url, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Log(string.Format("[Fill] Cycle {0}/{1} complete — returning to {2} ...", i + 1, cycle, url));
+                            await page.GotoAsync(url, new PageGotoOptions
+                            {
+                                WaitUntil = WaitUntilState.DOMContentLoaded,
+                                Timeout = 60000
+                            });
+                        }
+
+                        await WaitForPageReady(page);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[Fill] Cancelled while waiting for the page to be ready.", Color.Yellow);
+                    break;
+                }
+                catch (Exception navEx)
+                {
+                    Log(string.Format("[Fill] WARNING: failed to return to {0}: {1}", url, navEx.Message), Color.OrangeRed);
+                }
+
+                // Re-roll the grid's suggested values so the next cycle submits
+                // fresh random data instead of repeating the same values.
+                bool isLastCycle = i == cycle - 1;
+                if (!isLastCycle)
+                    RandomizeGridValues();
+            }
+        }
+
+        // Re-generates SuggestedValue for every enabled, randomizable row in
+        // dataGridView_Detected, reusing the same field-type inference logic
+        // as initial detection. Checkbox/radio/file/select rows are left alone
+        // since their "value" isn't free text (select needs its live <option>
+        // list, which we don't retain in the grid after detection).
+        private void RandomizeGridValues()
+        {
+            int changed = 0;
+            foreach (DataGridViewRow row in dataGridView_Detected.Rows)
+            {
+                bool enabled = row.Cells["col_DetEnabled"].Value is true;
+                if (!enabled) continue;
+
+                string type = (row.Cells["col_DetType"].Value?.ToString() ?? "text").ToLowerInvariant();
+                if (type == "checkbox" || type == "radio" || type == "file" || type == "select")
+                    continue;
+
+                string name = row.Cells["col_DetName"].Value?.ToString() ?? "";
+                string id = row.Cells["col_DetId"].Value?.ToString() ?? "";
+                string label = row.Cells["col_DetLabel"].Value?.ToString() ?? "";
+                string hint = (name + " " + id + " " + label).ToLowerInvariant();
+
+                string newVal = InferTextValue(hint, type);
+                if (newVal == null) continue;
+
+                row.Cells["col_DetValue"].Value = newVal;
+                changed++;
+            }
+
+            Log(string.Format("[Fill] Randomized {0} field value(s) on the grid for the next cycle.", changed), Color.Cyan);
+        }
+        // Detects whether the page is actually ready to be filled, instead of
+        // sleeping a fixed amount of time:
+        //   1. Wait for network activity to go idle (covers PHP redirects,
+        //      JS-rendered forms, AJAX-loaded content, etc.)
+        //   2. Wait for at least one of the currently-selected grid fields'
+        //      selectors to actually be attached + visible in the DOM.
+        private async Task WaitForPageReady(IPage page)
+        {
+            Log("[Fill] Waiting for the page to finish loading ...", Color.Cyan);
+
             try
             {
-                await FillAutoDetected(url, delayMs, _cts.Token);
-
-                if (!dryRun)
-                    await SubmitFormAsync();
-                else
-                    Log("[Fill] Dry run complete — form filled but NOT submitted.", Color.Yellow);
-
-                Log("[Fill] Done.", Color.LightGreen);
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+                    new PageWaitForLoadStateOptions { Timeout = 15000 });
             }
-            catch (OperationCanceledException)
+            catch (TimeoutException)
             {
-                Log("[Fill] Cancelled.", Color.Yellow);
+                // Some pages never go fully idle (polling, websockets, ads).
+                // Fall back to the plain Load state so we don't block forever.
+                Log("[Fill] Network never went idle — falling back to 'load' event.", Color.Yellow);
+                await page.WaitForLoadStateAsync(LoadState.Load,
+                    new PageWaitForLoadStateOptions { Timeout = 15000 });
+            }
+
+            string selector = null;
+            foreach (DataGridViewRow row in dataGridView_Detected.Rows)
+            {
+                bool enabled = row.Cells["col_DetEnabled"].Value is true;
+                string sel = row.Cells["col_DetSelector"].Value?.ToString();
+                if (enabled && !string.IsNullOrEmpty(sel)) { selector = sel; break; }
+            }
+
+            if (string.IsNullOrEmpty(selector))
+            {
+                Log("[Fill] Page ready.", Color.Cyan);
+                return;
+            }
+
+            try
+            {
+                foreach (IFrame frame in page.Frames)
+                {
+                    try
+                    {
+                        await frame.WaitForSelectorAsync(selector, new FrameWaitForSelectorOptions
+                        {
+                            State = WaitForSelectorState.Visible,
+                            Timeout = 10000
+                        });
+                        Log(string.Format("[Fill] Page ready — '{0}' is visible.", selector), Color.Cyan);
+                        return;
+                    }
+                    catch (TimeoutException) { /* not in this frame, try the next */ }
+                }
+                Log(string.Format("[Fill] WARNING: '{0}' never became visible — continuing anyway.", selector), Color.OrangeRed);
             }
             catch (Exception ex)
             {
-                Log(string.Format("[Fill] ERROR: {0}", ex.Message), Color.OrangeRed);
-            }
-            finally
-            {
-                SetRunning(false);
+                Log(string.Format("[Fill] WARNING: readiness check failed: {0} — continuing anyway.", ex.Message), Color.OrangeRed);
             }
         }
         private async Task FillAutoDetected(string url, int delayMs, CancellationToken ct)
