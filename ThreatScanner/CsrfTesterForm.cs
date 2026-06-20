@@ -620,7 +620,7 @@ namespace ThreatScanner
             {
                 var csrfNames = new[] {
                     "__requestverificationtoken", "csrfmiddlewaretoken", "authenticity_token",
-                    "_token", "csrf_token", "csrf", "xsrf", "__eventvalidation"
+                    "_token", "csrf_token", "csrf", "xsrf"
                 };
                 pairs = pairs.Where(kv =>
                     !csrfNames.Any(t => kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0))
