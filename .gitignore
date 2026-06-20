@@ -364,5 +364,5 @@ FodyWeavers.xsd
 
 
 # This explicitly tells Git to stop ignoring the bin folder
-/ThreatScanner/bin/
-/ThreatScanner/bin/**
+!/ThreatScanner/bin/
+!/ThreatScanner/bin/**
