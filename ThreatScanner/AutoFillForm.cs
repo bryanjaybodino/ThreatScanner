@@ -24,14 +24,14 @@ namespace ThreatScanner
         private static readonly Random Rng = new Random();
 
         // ── Value pools ───────────────────────────────────────────────────────
-        private static readonly string[] FirstNames = { "James", "Maria", "Carlos", "Angela", "Ricardo", "Sofia", "Miguel", "Anna" };
-        private static readonly string[] LastNames = { "Santos", "Reyes", "Cruz", "Garcia", "Lopez", "Torres", "Flores", "Ramos" };
-        private static readonly string[] MiddleNames = { "Jose", "Marie", "Grace", "Paul", "Rose", "John", "Mae", "Luis" };
-        private static readonly string[] Positions = { "Manager", "Analyst", "Developer", "Coordinator", "Supervisor", "Specialist" };
-        private static readonly string[] Cities = { "Manila", "Cebu", "Davao", "Quezon City", "Makati" };
-        private static readonly string[] Streets = { "Rizal Ave", "Mabini St", "Bonifacio Blvd", "Luna St", "Del Pilar" };
-        private static readonly string[] Companies = { "Zion Corp", "Apex Solutions", "Nova Systems", "Sigma Group", "Orion Tech" };
-        private static readonly string[] Departments = { "Engineering", "Finance", "HR", "Operations", "IT", "Marketing" };
+        private static readonly string[] FirstNames = { "James", "Maria", "Carlos", "Angela", "Ricardo", "Sofia", "Miguel", "Anna", "Juan", "Isabella", "Antonio", "Camila", "Francisco", "Patricia", "Eduardo", "Teresa", "Manuel", "Cristina", "Roberto", "Liza", "Fernando", "Diana" };
+        private static readonly string[] LastNames = { "Santos", "Reyes", "Cruz", "Garcia", "Lopez", "Torres", "Flores", "Ramos", "Mendoza", "Gonzales", "Aquino", "Bautista", "Castro", "Domingo", "Fernandez", "Gutierrez", "Hernandez", "Ignacio", "Javier", "Macaraeg", "Navarro", "Pascual" };
+        private static readonly string[] MiddleNames = { "Jose", "Marie", "Grace", "Paul", "Rose", "John", "Mae", "Luis", "Anne", "Carlo", "Faith", "Henry", "Joy", "Karl", "Lynn", "Mark", "Nicole", "Owen", "Pearl", "Ray", "Sheila", "Vince" };
+        private static readonly string[] Positions = { "Manager", "Analyst", "Developer", "Coordinator", "Supervisor", "Specialist", "Director", "Engineer", "Consultant", "Administrator", "Executive", "Officer", "Technician", "Architect", "Strategist", "Associate", "Lead", "Planner", "Auditor", "Researcher", "Designer", "Controller" };
+        private static readonly string[] Cities = { "Manila", "Cebu", "Davao", "Quezon City", "Makati", "Pasig", "Taguig", "Baguio", "Iloilo", "Bacolod", "Cagayan de Oro", "Zamboanga", "Antipolo", "Caloocan", "Las Piñas", "Marikina", "Muntinlupa", "Pasay", "Parañaque", "San Juan", "Valenzuela", "Mandaluyong" };
+        private static readonly string[] Streets = { "Rizal Ave", "Mabini St", "Bonifacio Blvd", "Luna St", "Del Pilar", "Aguinaldo Ave", "Quezon Blvd", "Magsaysay St", "Burgos St", "Roxas Blvd", "Espana Blvd", "Taft Ave", "Shaw Blvd", "Ortigas Ave", "Katipunan Ave", "Aurora Blvd", "Commonwealth Ave", "EDSA", "Marcos Highway", "Tandang Sora", "Visayas Ave", "Quirino Ave" };
+        private static readonly string[] Companies = { "Zion Corp", "Apex Solutions", "Nova Systems", "Sigma Group", "Orion Tech", "Vertex Industries", "Pinnacle Holdings", "Horizon Enterprises", "Stellar Dynamics", "Quantum Innovations", "Summit Partners", "Catalyst Ventures", "Beacon Technologies", "Atlas Corporation", "Crest Solutions", "Phoenix Group", "Meridian Systems", "Aurora Networks", "Titan Industries", "Vanguard Tech", "Falcon Enterprises", "Eclipse Holdings" };
+        private static readonly string[] Departments = { "Engineering", "Finance", "HR", "Operations", "IT", "Marketing", "Sales", "Legal", "Procurement", "Logistics", "Customer Service", "Quality Assurance", "Research", "Administration", "Compliance", "Product", "Design", "Security", "Training", "Audit", "Strategy", "Communications" };
 
         // ── Dummy files for upload fields ─────────────────────────────────────
         private static readonly string DummyFileDir = Path.Combine(Path.GetTempPath(), "AutoFillDummies");
