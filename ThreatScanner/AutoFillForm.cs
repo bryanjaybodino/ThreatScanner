@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -37,6 +38,92 @@ namespace ThreatScanner
         private static readonly string[] Streets = { "Rizal Ave", "Mabini St", "Bonifacio Blvd", "Luna St", "Del Pilar" };
         private static readonly string[] Companies = { "Zion Corp", "Apex Solutions", "Nova Systems", "Sigma Group", "Orion Tech" };
         private static readonly string[] Departments = { "Engineering", "Finance", "HR", "Operations", "IT", "Marketing" };
+
+        // ── Dummy files for upload fields ─────────────────────────────────────
+        private static readonly string DummyFileDir = Path.Combine(Path.GetTempPath(), "AutoFillDummies");
+        private static string _dummyPdf;
+        private static string _dummyDocx;
+        private static string _dummyImage;
+
+        private static string GetDummyFilePath(string hint)
+        {
+            if (!Directory.Exists(DummyFileDir)) Directory.CreateDirectory(DummyFileDir);
+
+            if (_dummyPdf == null)
+            {
+                _dummyPdf = Path.Combine(DummyFileDir, "dummy_resume.pdf");
+                _dummyDocx = Path.Combine(DummyFileDir, "dummy_document.docx");
+                _dummyImage = Path.Combine(DummyFileDir, "dummy_photo.png");
+
+                // Minimal valid 1-page PDF (no library needed)
+                if (!File.Exists(_dummyPdf))
+                    File.WriteAllText(_dummyPdf,
+                        "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+                        "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+                        "3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\n" +
+                        "xref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n" +
+                        "0000000058 00000 n\n0000000115 00000 n\n" +
+                        "trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF");
+
+                // Minimal valid DOCX (ZIP with required XML parts)
+                if (!File.Exists(_dummyDocx))
+                    File.WriteAllBytes(_dummyDocx, CreateMinimalDocx());
+
+                // 1x1 white PNG (89 bytes, no library needed)
+                if (!File.Exists(_dummyImage))
+                    File.WriteAllBytes(_dummyImage, new byte[] {
+                        0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0x00,0x00,0x00,0x0D,0x49,0x48,0x44,0x52,
+                        0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x08,0x02,0x00,0x00,0x00,0x90,0x77,0x53,
+                        0xDE,0x00,0x00,0x00,0x0C,0x49,0x44,0x41,0x54,0x08,0xD7,0x63,0xF8,0xFF,0xFF,0x3F,
+                        0x00,0x05,0xFE,0x02,0xFE,0xDC,0xCC,0x59,0xE7,0x00,0x00,0x00,0x00,0x49,0x45,0x4E,
+                        0x44,0xAE,0x42,0x60,0x82 });
+            }
+
+            if (hint.Contains("photo") || hint.Contains("image") || hint.Contains("avatar") || hint.Contains("picture"))
+                return _dummyImage;
+            if (hint.Contains("doc") || hint.Contains("word"))
+                return _dummyDocx;
+            return _dummyPdf; // default: PDF (resume, file, attachment, etc.)
+        }
+
+        private static byte[] CreateMinimalDocx()
+        {
+            using (var ms = new MemoryStream())
+            {
+                using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+                {
+                    WriteZipEntry(zip, "[Content_Types].xml",
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                        "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                        "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                        "<Override PartName=\"/word/document.xml\" " +
+                        "ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>" +
+                        "</Types>");
+                    WriteZipEntry(zip, "_rels/.rels",
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                        "<Relationship Id=\"rId1\" " +
+                        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" " +
+                        "Target=\"word/document.xml\"/>" +
+                        "</Relationships>");
+                    WriteZipEntry(zip, "word/document.xml",
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                        "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
+                        "<w:body><w:p><w:r><w:t>AutoFill dummy document.</w:t></w:r></w:p></w:body>" +
+                        "</w:document>");
+                }
+                return ms.ToArray();
+            }
+        }
+
+        private static void WriteZipEntry(ZipArchive zip, string entryName, string content)
+        {
+            ZipArchiveEntry entry = zip.CreateEntry(entryName);
+            using (StreamWriter sw = new StreamWriter(entry.Open()))
+            {
+                sw.Write(content);
+            }
+        }
 
         // ── CDP — now ONE field instead of three ──────────────────────────────
         // REMOVED: _playwright, _browser, _activePage
@@ -244,12 +331,13 @@ namespace ThreatScanner
                     Log("[Detect][DIAG]    form " + fd, Color.Cyan);
 
                 IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='file']), textarea");
+                IReadOnlyList<IElementHandle> fileInputs = await frame.QuerySelectorAllAsync("input[type='file']");
                 IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
                 IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
                 IReadOnlyList<IElementHandle> radios = await frame.QuerySelectorAllAsync("input[type='radio']");
 
-                Log(string.Format("[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4}",
-                    frameIndex, inputs.Count, selects.Count, checkboxes.Count, radios.Count), Color.Cyan);
+                Log(string.Format("[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4} fileInputs={5}",
+                    frameIndex, inputs.Count, selects.Count, checkboxes.Count, radios.Count, fileInputs.Count), Color.Cyan);
 
                 int skippedInvisible = 0, skippedDisabled = 0, kept = 0;
 
@@ -325,6 +413,18 @@ namespace ThreatScanner
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
                     results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "radio", Label = "", Selector = BuildSelector(name, id), SuggestedValue = "(first)" });
+                }
+
+                foreach (IElementHandle el in fileInputs)
+                {
+                    if (!await el.IsVisibleAsync() && !await el.IsEnabledAsync()) continue;
+                    string name = await el.GetAttributeAsync("name") ?? "";
+                    string id = await el.GetAttributeAsync("id") ?? "";
+                    string label = await GetLabelText(frame, id);
+                    string hint = (name + " " + id + " " + label).ToLowerInvariant();
+                    string dummyPath = GetDummyFilePath(hint);
+                    Log(string.Format("[Detect][DIAG]    + file-input name='{0}' id='{1}' -> will upload '{2}'", name, id, Path.GetFileName(dummyPath)), Color.Gray);
+                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "file", Label = label, Selector = BuildSelector(name, id), SuggestedValue = dummyPath });
                 }
 
                 Log(string.Format("[Detect][DIAG] frame[{0}] visible-input summary -> kept={1} skippedInvisible={2} skippedDisabled={3}",
@@ -464,6 +564,30 @@ namespace ThreatScanner
                     }
                     handled.Add(f);
                 }
+                else if (type == "file")
+                {
+                    string filePath = f.SuggestedValue;
+                    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                    {
+                        // Regenerate from hint if stored path is missing
+                        string hint2 = (f.Name + " " + f.Id + " " + f.Label).ToLowerInvariant();
+                        filePath = GetDummyFilePath(hint2);
+                    }
+                    await el.SetInputFilesAsync(filePath);
+                    Log(string.Format("  UPLOAD [{0}] -> \"{1}\"", f.Selector, Path.GetFileName(filePath)));
+                    handled.Add(f);
+                }
+                else if (type == "date" || type == "time" || type == "week" ||
+                         type == "month" || type == "range" || type == "color")
+                {
+                    // Browsers require programmatic value assignment for these types;
+                    // keyboard typing is ignored or produces invalid input.
+                    string value = f.SuggestedValue;
+                    if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
+                    await el.EvaluateAsync("(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", value);
+                    Log(string.Format("  FILL   [{0}] ({1}) -> \"{2}\" [via JS]", f.Selector, type, value));
+                    handled.Add(f);
+                }
                 else
                 {
                     string value = f.SuggestedValue;
@@ -492,6 +616,7 @@ namespace ThreatScanner
         private async Task FillFrameDynamic(IFrame frame, IPage page, int delayMs, CancellationToken ct)
         {
             IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea");
+            IReadOnlyList<IElementHandle> fileInputs = await frame.QuerySelectorAllAsync("input[type='file']");
             IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
             IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
             IReadOnlyList<IElementHandle> radios = await frame.QuerySelectorAllAsync("input[type='radio']");
@@ -516,16 +641,26 @@ namespace ThreatScanner
 
                 await el.ScrollIntoViewIfNeededAsync();
                 await Task.Delay(Rng.Next(150, 300));
-                await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
-                await Task.Delay(60);
-                await page.Keyboard.PressAsync("Delete");
-                foreach (char c in value)
+
+                if (type == "date" || type == "time" || type == "week" ||
+                    type == "month" || type == "range" || type == "color")
                 {
-                    await page.Keyboard.TypeAsync(c.ToString());
-                    await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
+                    await el.EvaluateAsync("(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", value);
+                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\" [via JS]", type, Truncate(hint, 38), value));
                 }
-                await page.Keyboard.PressAsync("Tab");
-                Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\"", type, Truncate(hint, 38), value));
+                else
+                {
+                    await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
+                    await Task.Delay(60);
+                    await page.Keyboard.PressAsync("Delete");
+                    foreach (char c in value)
+                    {
+                        await page.Keyboard.TypeAsync(c.ToString());
+                        await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
+                    }
+                    await page.Keyboard.PressAsync("Tab");
+                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\"", type, Truncate(hint, 38), value));
+                }
                 await Task.Delay(delayMs);
             }
 
@@ -583,6 +718,21 @@ namespace ThreatScanner
                 radioGroups.Add(name);
                 await Task.Delay(delayMs);
             }
+
+            foreach (IElementHandle el in fileInputs)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!await el.IsEnabledAsync()) continue;
+                string name = await el.GetAttributeAsync("name") ?? "";
+                string id = await el.GetAttributeAsync("id") ?? "";
+                string label = await GetLabelText(frame, id);
+                string hint = (name + " " + id + " " + label).ToLowerInvariant();
+                string filePath = GetDummyFilePath(hint);
+                await el.ScrollIntoViewIfNeededAsync();
+                await el.SetInputFilesAsync(filePath);
+                Log(string.Format("  UPLOAD file-input name=\"{0}\" -> \"{1}\"", name, Path.GetFileName(filePath)));
+                await Task.Delay(delayMs);
+            }
         }
 
         // =========================================================================
@@ -609,27 +759,55 @@ namespace ThreatScanner
 
         private static string InferTextValue(string hint, string type)
         {
+            // ── Type-based checks first (highest priority) ────────────────────
             if (type == "password" || hint.Contains("pass")) return string.Format("Pass{0}!A", Rng.Next(1000, 9999));
-            if (type == "email" || hint.Contains("email") || hint.Contains("mail")) return string.Format("{0}{1}@{2}", Pick(FirstNames).ToLower(), Rng.Next(10, 999), Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
-            if (hint.Contains("phone") || hint.Contains("mobile") || hint.Contains("tel") || hint.Contains("cel")) return string.Format("09{0}", Rng.Next(100000000, 999999999));
-            if (hint.Contains("user") || hint.Contains("login")) return string.Format("{0}.{1}{2}", Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
+            if (type == "email" || hint.Contains("email") || hint.Contains("mail"))
+                return string.Format("{0}{1}@{2}", Pick(FirstNames).ToLower(), Rng.Next(10, 999), Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
+            // url/website must be checked before "user" so "user-url" doesn't become a username
+            if (type == "url" || hint.Contains("url") || hint.Contains("website"))
+                return string.Format("https://{0}.com", Pick(FirstNames).ToLower());
+            // search field — return plausible keywords, not a username
+            if (type == "search")
+                return Pick(new[] { "sample query", "test search", "keyword example", "auto fill test" });
+            // date/time/range/color handled by FillFrameFromGrid via JS; return the value string here for Detect display
+            if (type == "date") return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
+            if (type == "time") return string.Format("{0:D2}:{1:D2}", Rng.Next(8, 17), Rng.Next(0, 59));
+            if (type == "week") return string.Format("{0}-W{1:D2}", Rng.Next(2024, 2026), Rng.Next(1, 52));
+            if (type == "month") return string.Format("{0}-{1:D2}", Rng.Next(2020, 2026), Rng.Next(1, 12));
+            if (type == "range") return Rng.Next(3, 8).ToString();
+            if (type == "color") return Pick(new[] { "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA" });
+            if (type == "number" || hint.Contains("amount") || hint.Contains("qty"))
+                return Rng.Next(18, 65).ToString();
+
+            // ── Hint-based checks ─────────────────────────────────────────────
+            if (hint.Contains("phone") || hint.Contains("mobile") || hint.Contains("tel") || hint.Contains("cel"))
+                return string.Format("09{0}", Rng.Next(100000000, 999999999));
             if (hint.Contains("first") || hint.Contains("fname") || hint.Contains("given")) return Pick(FirstNames);
             if (hint.Contains("middle") || hint.Contains("mname")) return Pick(MiddleNames);
             if (hint.Contains("last") || hint.Contains("lname") || hint.Contains("surname")) return Pick(LastNames);
             if (hint.Contains("suffix")) return Pick(new[] { "Jr.", "Sr.", "III" });
-            if (hint.Contains("fullname") || hint.Contains("full_name") || hint.Contains("full name")) return string.Format("{0} {1}", Pick(FirstNames), Pick(LastNames));
+            if (hint.Contains("fullname") || hint.Contains("full_name") || hint.Contains("full name") || hint.Contains("full-name"))
+                return string.Format("{0} {1}", Pick(FirstNames), Pick(LastNames));
+            // username/login check AFTER url/website/full-name
+            if (hint.Contains("user") || hint.Contains("login"))
+                return string.Format("{0}.{1}{2}", Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
             if (hint.Contains("position") || hint.Contains("title") || hint.Contains("designation")) return Pick(Positions);
             if (hint.Contains("department") || hint.Contains("dept")) return Pick(Departments);
             if (hint.Contains("company") || hint.Contains("organization") || hint.Contains("org")) return Pick(Companies);
-            if (hint.Contains("address") || hint.Contains("street")) return string.Format("{0} {1}", Rng.Next(1, 999), Pick(Streets));
+            if (hint.Contains("address") || hint.Contains("street"))
+                return string.Format("{0} {1}", Rng.Next(1, 999), Pick(Streets));
             if (hint.Contains("city") || hint.Contains("municipality")) return Pick(Cities);
             if (hint.Contains("zip") || hint.Contains("postal")) return Rng.Next(1000, 9999).ToString();
             if (hint.Contains("age")) return Rng.Next(18, 65).ToString();
-            if (type == "date" || hint.Contains("date") || hint.Contains("birth") || hint.Contains("dob")) return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2000), Rng.Next(1, 12), Rng.Next(1, 28));
-            if (type == "number" || hint.Contains("amount") || hint.Contains("qty")) return Rng.Next(1, 100).ToString();
-            if (type == "url" || hint.Contains("url") || hint.Contains("website")) return "https://example.com";
-            if (hint.Contains("note") || hint.Contains("remark") || hint.Contains("comment") || hint.Contains("description")) return "Auto-generated entry for testing purposes.";
-            if (type == "text" || type == "search" || string.IsNullOrEmpty(type)) return string.Format("Value{0}", Rng.Next(100, 999));
+            if (hint.Contains("date") || hint.Contains("birth") || hint.Contains("dob"))
+                return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
+            // datalist/autocomplete browser fields
+            if (hint.Contains("browser")) return Pick(new[] { "Google Chrome", "Mozilla Firefox", "Microsoft Edge", "Safari", "Opera" });
+            if (hint.Contains("note") || hint.Contains("remark") || hint.Contains("comment") || hint.Contains("description"))
+                return "Auto-generated entry for testing purposes.";
+
+            // ── Generic fallback ──────────────────────────────────────────────
+            if (type == "text" || string.IsNullOrEmpty(type)) return string.Format("Value{0}", Rng.Next(100, 999));
             return null;
         }
 
