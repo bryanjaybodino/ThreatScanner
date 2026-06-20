@@ -1,10 +1,4 @@
-﻿// ═══════════════════════════════════════════════════════════════════════════
-//  AutoFillForm.cs  — CDP session managed by CdpHelper
-//  Replace only the CDP-related fields, constructor wiring, FormClosing,
-//  GetOrCreateActivePageAsync, EnsureEdgeRunningAsync, IsCdpReady, and
-//  GetEdgePath.  All other methods (DetectFieldsAsync, FillAutoDetected,
-//  FillFrameFromGrid, FillFrameDynamic, …) stay exactly as they were.
-// ═══════════════════════════════════════════════════════════════════════════
+﻿// AutoFillForm.cs
 using Microsoft.Playwright;
 using System;
 using System.Collections.Generic;
@@ -17,13 +11,13 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ThreatScanner.Helpers;          // ← CdpHelper lives here
+using ThreatScanner.Helpers;
 
 namespace ThreatScanner
 {
     public partial class AutoFillForm : Form
     {
-        // ── Constants (non-CDP ones kept here) ────────────────────────────────
+        // ── Constants ─────────────────────────────────────────────────────────
         private const int DELAY_MIN = 60;
         private const int DELAY_MAX = 180;
 
@@ -55,7 +49,6 @@ namespace ThreatScanner
                 _dummyDocx = Path.Combine(DummyFileDir, "dummy_document.docx");
                 _dummyImage = Path.Combine(DummyFileDir, "dummy_photo.png");
 
-                // Minimal valid 1-page PDF (no library needed)
                 if (!File.Exists(_dummyPdf))
                     File.WriteAllText(_dummyPdf,
                         "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
@@ -65,11 +58,9 @@ namespace ThreatScanner
                         "0000000058 00000 n\n0000000115 00000 n\n" +
                         "trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF");
 
-                // Minimal valid DOCX (ZIP with required XML parts)
                 if (!File.Exists(_dummyDocx))
                     File.WriteAllBytes(_dummyDocx, CreateMinimalDocx());
 
-                // 1x1 white PNG (89 bytes, no library needed)
                 if (!File.Exists(_dummyImage))
                     File.WriteAllBytes(_dummyImage, new byte[] {
                         0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0x00,0x00,0x00,0x0D,0x49,0x48,0x44,0x52,
@@ -83,7 +74,7 @@ namespace ThreatScanner
                 return _dummyImage;
             if (hint.Contains("doc") || hint.Contains("word"))
                 return _dummyDocx;
-            return _dummyPdf; // default: PDF (resume, file, attachment, etc.)
+            return _dummyPdf;
         }
 
         private static byte[] CreateMinimalDocx()
@@ -125,16 +116,8 @@ namespace ThreatScanner
             }
         }
 
-        // ── CDP — now ONE field instead of three ──────────────────────────────
-        // REMOVED: _playwright, _browser, _activePage
-        // REPLACED BY:
+        // ── CDP ───────────────────────────────────────────────────────────────
         private CdpHelper _cdp;
-
-        // Shortcut: the page the Detect step navigated to, cached so Fill can
-        // reuse it without re-navigating (WebForms regenerates control IDs).
-        private IPage _activePage => _cdp != null
-            ? _cdp.GetOrCreateActivePageAsync().GetAwaiter().GetResult()
-            : null;
 
         private CancellationTokenSource _cts;
         private bool _running = false;
@@ -148,7 +131,6 @@ namespace ThreatScanner
             ApplyOutputTheme();
             button_FillForm.Enabled = false;
 
-            // Wire up CdpHelper with our own Log callback
             _cdp = new CdpHelper((msg, isError) =>
                 Log(msg, isError ? Color.OrangeRed : (Color?)null));
 
@@ -157,26 +139,14 @@ namespace ThreatScanner
 
         private void AutoFillForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // Disconnect from Edge (does NOT close the browser window)
             _cdp?.Dispose();
         }
 
-        // =========================================================================
-        //  GetOrCreateActivePageAsync — now delegates to CdpHelper
-        // =========================================================================
         private Task<IPage> GetOrCreateActivePageAsync() =>
             _cdp.GetOrCreateActivePageAsync();
 
         // =========================================================================
-        //  EnsureEdgeRunningAsync / IsCdpReady / GetEdgePath
-        //  — DELETED from this class; CdpHelper owns them entirely.
-        //    If you need to reference CDP_ENDPOINT elsewhere in this file, use:
-        //    CdpHelper.CDP_ENDPOINT
-        // =========================================================================
-
-
-        // =========================================================================
-        //  UI EVENT HANDLERS  (unchanged — shown here for completeness)
+        //  UI EVENT HANDLERS
         // =========================================================================
 
         private async void button_DetectFields_Click(object sender, EventArgs e)
@@ -192,8 +162,7 @@ namespace ThreatScanner
 
             try
             {
-                bool headless = checkBox_HeadlessBrowser.Checked;
-                List<FieldInfo> fields = await DetectFieldsAsync(url, headless);
+                List<FieldInfo> fields = await DetectFieldsAsync(url);
 
                 foreach (FieldInfo f in fields)
                 {
@@ -206,6 +175,15 @@ namespace ThreatScanner
                     dataGridView_Detected.Rows[row].Cells["col_DetLabel"].Value = f.Label;
                     dataGridView_Detected.Rows[row].Cells["col_DetSelector"].Value = f.Selector;
                     dataGridView_Detected.Rows[row].Cells["col_DetValue"].Value = f.SuggestedValue;
+                }
+
+                // Minimize browser, bring app to front if checkbox is ticked
+                if (checkBox_HeadlessBrowser.Checked)
+                {
+                    IPage page = await GetOrCreateActivePageAsync();
+                    await page.EvaluateAsync("() => window.blur()");
+                    this.Activate();
+                    this.BringToFront();
                 }
 
                 Log(string.Format("[Detect] Found {0} field(s).", fields.Count), Color.LightGreen);
@@ -238,7 +216,13 @@ namespace ThreatScanner
             _cts = new CancellationTokenSource();
             try
             {
-                await FillAutoDetected(url, dryRun, delayMs, _cts.Token);
+                await FillAutoDetected(url, delayMs, _cts.Token);
+
+                if (!dryRun)
+                    await SubmitFormAsync();
+                else
+                    Log("[Fill] Dry run complete — form filled but NOT submitted.", Color.Yellow);
+
                 Log("[Fill] Done.", Color.LightGreen);
             }
             catch (OperationCanceledException)
@@ -254,7 +238,51 @@ namespace ThreatScanner
                 SetRunning(false);
             }
         }
+        private async Task FillAutoDetected(string url, int delayMs, CancellationToken ct)
+        {
+            List<FieldInfo> selectedFields = new List<FieldInfo>();
+            foreach (DataGridViewRow row in dataGridView_Detected.Rows)
+            {
+                bool enabled = row.Cells["col_DetEnabled"].Value is true;
+                if (!enabled) continue;
+                selectedFields.Add(new FieldInfo
+                {
+                    Tag = row.Cells["col_DetTag"].Value?.ToString() ?? "",
+                    Name = row.Cells["col_DetName"].Value?.ToString() ?? "",
+                    Id = row.Cells["col_DetId"].Value?.ToString() ?? "",
+                    Type = row.Cells["col_DetType"].Value?.ToString() ?? "",
+                    Label = row.Cells["col_DetLabel"].Value?.ToString() ?? "",
+                    Selector = row.Cells["col_DetSelector"].Value?.ToString() ?? "",
+                    SuggestedValue = row.Cells["col_DetValue"].Value?.ToString() ?? ""
+                });
+            }
 
+            if (selectedFields.Count == 0)
+            {
+                Log("[Fill] No fields selected — tick at least one checkbox in the grid.", Color.OrangeRed);
+                return;
+            }
+
+            IPage page = await GetOrCreateActivePageAsync();
+            if (page == null || page.IsClosed)
+            {
+                Log("[Fill] No active page. Run 'Detect Fields' first.", Color.OrangeRed);
+                return;
+            }
+
+            Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)",
+                page.Url, page.Frames.Count, selectedFields.Count));
+
+            HashSet<FieldInfo> handled = new HashSet<FieldInfo>();
+            foreach (IFrame frame in page.Frames)
+                await FillFrameFromGrid(frame, page, selectedFields, handled, delayMs, ct);
+
+            int missed = selectedFields.Count - handled.Count;
+            if (missed > 0)
+                Log(string.Format(
+                    "[Fill] {0} selected field(s) were not found on the page (re-run Detect if the DOM changed).",
+                    missed), Color.OrangeRed);
+        }
         private void button_SaveReport_Click(object sender, EventArgs e)
         {
             using (SaveFileDialog dlg = new SaveFileDialog())
@@ -272,16 +300,81 @@ namespace ThreatScanner
         private void button_ClearOutput_Click(object sender, EventArgs e) =>
             richTextBox_Output.Clear();
 
-
         // =========================================================================
-        //  CORE LOGIC — DETECT  (unchanged)
+        //  SUBMIT
         // =========================================================================
 
-        private async Task<List<FieldInfo>> DetectFieldsAsync(string url, bool headless)
+        private async Task SubmitFormAsync()
         {
-            if (headless)
-                Log("[Detect] Note: this tool attaches to your real Edge session via CDP, so the page will be visible regardless of 'Run headless'. Log in there first if needed.", Color.Yellow);
+            IPage page = await GetOrCreateActivePageAsync();
+            if (page == null || page.IsClosed)
+            {
+                Log("[Submit] No active page.", Color.OrangeRed);
+                return;
+            }
 
+            string[] submitSelectors = new string[]
+            {
+                "input[type='submit']",
+                "button[type='submit']",
+                "button:not([type='button']):not([type='reset'])"
+            };
+
+            string[] submitKeywords = new string[]
+            {
+                "submit", "save", "send", "confirm", "register",
+                "sign up", "sign in", "login", "next", "proceed", "apply"
+            };
+
+            foreach (IFrame frame in page.Frames)
+            {
+                foreach (string sel in submitSelectors)
+                {
+                    IReadOnlyList<IElementHandle> buttons =
+                        await frame.QuerySelectorAllAsync(sel);
+
+                    foreach (IElementHandle btn in buttons)
+                    {
+                        if (!await btn.IsVisibleAsync() || !await btn.IsEnabledAsync())
+                            continue;
+
+                        // For generic <button>, verify the label looks like a submit action
+                        if (sel == "button:not([type='button']):not([type='reset'])")
+                        {
+                            string text = (await btn.InnerTextAsync()).Trim();
+                            bool isSubmitLike = false;
+                            foreach (string kw in submitKeywords)
+                            {
+                                if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    isSubmitLike = true;
+                                    break;
+                                }
+                            }
+                            if (!isSubmitLike) continue;
+                        }
+
+                        await btn.ScrollIntoViewIfNeededAsync();
+                        await Task.Delay(300);
+                        await btn.ClickAsync();
+                        Log(string.Format("[Submit] Clicked '{0}' in frame: {1}",
+                            sel, frame.Url), Color.LightGreen);
+                        return;
+                    }
+                }
+            }
+
+            // Last resort
+            Log("[Submit] No submit button found — pressing Enter.", Color.Yellow);
+            await page.Keyboard.PressAsync("Enter");
+        }
+
+        // =========================================================================
+        //  DETECT
+        // =========================================================================
+
+        private async Task<List<FieldInfo>> DetectFieldsAsync(string url)
+        {
             List<FieldInfo> results = new List<FieldInfo>();
 
             IPage page = await GetOrCreateActivePageAsync();
@@ -292,12 +385,15 @@ namespace ThreatScanner
                 WaitUntil = WaitUntilState.DOMContentLoaded,
                 Timeout = 60000
             });
-            await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = 30000 });
+            await page.WaitForLoadStateAsync(LoadState.Load,
+                new PageWaitForLoadStateOptions { Timeout = 30000 });
 
             if (page.Url.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 &&
                 url.IndexOf("Login", StringComparison.OrdinalIgnoreCase) < 0)
             {
-                Log(string.Format("[Detect] WARNING: requested {0} but landed on {1} — log in first, then re-run Detect.", url, page.Url), Color.OrangeRed);
+                Log(string.Format(
+                    "[Detect] WARNING: requested {0} but landed on {1} — log in first, then re-run Detect.",
+                    url, page.Url), Color.OrangeRed);
             }
 
             Log(string.Format("[Detect][DIAG] page.Frames count = {0}", page.Frames.Count), Color.Cyan);
@@ -318,25 +414,38 @@ namespace ThreatScanner
                 }
                 catch (Exception evalEx)
                 {
-                    Log(string.Format("[Detect][DIAG] frame[{0}] form-inventory eval failed: {1}", frameIndex, evalEx.Message), Color.OrangeRed);
+                    Log(string.Format("[Detect][DIAG] frame[{0}] form-inventory eval failed: {1}",
+                        frameIndex, evalEx.Message), Color.OrangeRed);
                 }
 
                 List<string> formDescriptors = new List<string>();
-                try { formDescriptors = JsonSerializer.Deserialize<List<string>>(formDescriptorsJson) ?? new List<string>(); }
-                catch { formDescriptors = new List<string> { "(raw) " + formDescriptorsJson }; }
+                try
+                {
+                    formDescriptors = JsonSerializer.Deserialize<List<string>>(formDescriptorsJson)
+                        ?? new List<string>();
+                }
+                catch
+                {
+                    formDescriptors = new List<string> { "(raw) " + formDescriptorsJson };
+                }
 
-                Log(string.Format("[Detect][DIAG] frame[{0}] url='{1}' isDetached={2} <form> count={3}",
+                Log(string.Format(
+                    "[Detect][DIAG] frame[{0}] url='{1}' isDetached={2} <form> count={3}",
                     frameIndex, frame.Url, frame.IsDetached, formDescriptors.Count), Color.Cyan);
+
                 foreach (string fd in formDescriptors)
                     Log("[Detect][DIAG]    form " + fd, Color.Cyan);
 
-                IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='file']), textarea");
+                IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync(
+                    "input:not([type='hidden']):not([type='submit']):not([type='button'])" +
+                    ":not([type='reset']):not([type='image']):not([type='file']), textarea");
                 IReadOnlyList<IElementHandle> fileInputs = await frame.QuerySelectorAllAsync("input[type='file']");
                 IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
                 IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
                 IReadOnlyList<IElementHandle> radios = await frame.QuerySelectorAllAsync("input[type='radio']");
 
-                Log(string.Format("[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4} fileInputs={5}",
+                Log(string.Format(
+                    "[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4} fileInputs={5}",
                     frameIndex, inputs.Count, selects.Count, checkboxes.Count, radios.Count, fileInputs.Count), Color.Cyan);
 
                 int skippedInvisible = 0, skippedDisabled = 0, kept = 0;
@@ -367,16 +476,31 @@ namespace ThreatScanner
                             }
                         ");
                     }
-                    catch (Exception ownerEx) { ownerForm = "(eval failed: " + ownerEx.Message + ")"; }
+                    catch (Exception ownerEx)
+                    {
+                        ownerForm = "(eval failed: " + ownerEx.Message + ")";
+                    }
 
                     kept++;
-                    Log(string.Format("[Detect][DIAG]    + input name='{0}' id='{1}' type='{2}' ownerForm={3}", name, id, type, ownerForm), Color.Gray);
-                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = type, Label = label, Selector = BuildSelector(name, id), SuggestedValue = InferTextValue(hint, type) });
+                    Log(string.Format("[Detect][DIAG]    + input name='{0}' id='{1}' type='{2}' ownerForm={3}",
+                        name, id, type, ownerForm), Color.Gray);
+
+                    results.Add(new FieldInfo
+                    {
+                        Tag = "input",
+                        Name = name,
+                        Id = id,
+                        Type = type,
+                        Label = label,
+                        Selector = BuildSelector(name, id),
+                        SuggestedValue = InferTextValue(hint, type)
+                    });
                 }
 
                 foreach (IElementHandle el in selects)
                 {
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
+
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
                     string label = await GetLabelText(frame, id);
@@ -393,10 +517,24 @@ namespace ThreatScanner
                             }
                         ");
                     }
-                    catch (Exception ownerEx) { ownerForm = "(eval failed: " + ownerEx.Message + ")"; }
+                    catch (Exception ownerEx)
+                    {
+                        ownerForm = "(eval failed: " + ownerEx.Message + ")";
+                    }
 
-                    Log(string.Format("[Detect][DIAG]    + select name='{0}' id='{1}' ownerForm={2}", name, id, ownerForm), Color.Gray);
-                    results.Add(new FieldInfo { Tag = "select", Name = name, Id = id, Type = "select", Label = label, Selector = BuildSelector(name, id), SuggestedValue = "(first valid option)" });
+                    Log(string.Format("[Detect][DIAG]    + select name='{0}' id='{1}' ownerForm={2}",
+                        name, id, ownerForm), Color.Gray);
+
+                    results.Add(new FieldInfo
+                    {
+                        Tag = "select",
+                        Name = name,
+                        Id = id,
+                        Type = "select",
+                        Label = label,
+                        Selector = BuildSelector(name, id),
+                        SuggestedValue = "(first valid option)"
+                    });
                 }
 
                 foreach (IElementHandle el in checkboxes)
@@ -404,7 +542,16 @@ namespace ThreatScanner
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
-                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "checkbox", Label = "", Selector = BuildSelector(name, id), SuggestedValue = "true" });
+                    results.Add(new FieldInfo
+                    {
+                        Tag = "input",
+                        Name = name,
+                        Id = id,
+                        Type = "checkbox",
+                        Label = "",
+                        Selector = BuildSelector(name, id),
+                        SuggestedValue = "true"
+                    });
                 }
 
                 foreach (IElementHandle el in radios)
@@ -412,7 +559,16 @@ namespace ThreatScanner
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                     string name = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
-                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "radio", Label = "", Selector = BuildSelector(name, id), SuggestedValue = "(first)" });
+                    results.Add(new FieldInfo
+                    {
+                        Tag = "input",
+                        Name = name,
+                        Id = id,
+                        Type = "radio",
+                        Label = "",
+                        Selector = BuildSelector(name, id),
+                        SuggestedValue = "(first)"
+                    });
                 }
 
                 foreach (IElementHandle el in fileInputs)
@@ -423,33 +579,48 @@ namespace ThreatScanner
                     string label = await GetLabelText(frame, id);
                     string hint = (name + " " + id + " " + label).ToLowerInvariant();
                     string dummyPath = GetDummyFilePath(hint);
-                    Log(string.Format("[Detect][DIAG]    + file-input name='{0}' id='{1}' -> will upload '{2}'", name, id, Path.GetFileName(dummyPath)), Color.Gray);
-                    results.Add(new FieldInfo { Tag = "input", Name = name, Id = id, Type = "file", Label = label, Selector = BuildSelector(name, id), SuggestedValue = dummyPath });
+                    Log(string.Format("[Detect][DIAG]    + file-input name='{0}' id='{1}' -> will upload '{2}'",
+                        name, id, Path.GetFileName(dummyPath)), Color.Gray);
+                    results.Add(new FieldInfo
+                    {
+                        Tag = "input",
+                        Name = name,
+                        Id = id,
+                        Type = "file",
+                        Label = label,
+                        Selector = BuildSelector(name, id),
+                        SuggestedValue = dummyPath
+                    });
                 }
 
-                Log(string.Format("[Detect][DIAG] frame[{0}] visible-input summary -> kept={1} skippedInvisible={2} skippedDisabled={3}",
+                Log(string.Format(
+                    "[Detect][DIAG] frame[{0}] visible-input summary -> kept={1} skippedInvisible={2} skippedDisabled={3}",
                     frameIndex, kept, skippedInvisible, skippedDisabled), Color.Cyan);
             }
 
             Log(string.Format("[Detect][DIAG] TOTAL fields collected = {0}", results.Count), Color.Cyan);
+
             Dictionary<string, int> selectorCounts = new Dictionary<string, int>();
             foreach (FieldInfo fi in results)
             {
-                if (!selectorCounts.ContainsKey(fi.Selector)) selectorCounts[fi.Selector] = 0;
+                if (!selectorCounts.ContainsKey(fi.Selector))
+                    selectorCounts[fi.Selector] = 0;
                 selectorCounts[fi.Selector]++;
             }
             foreach (KeyValuePair<string, int> kv in selectorCounts)
             {
                 if (kv.Value > 1)
-                    Log(string.Format("[Detect][DIAG] !! DUPLICATE selector '{0}' used by {1} fields.", kv.Key, kv.Value), Color.OrangeRed);
+                    Log(string.Format("[Detect][DIAG] !! DUPLICATE selector '{0}' used by {1} fields.",
+                        kv.Key, kv.Value), Color.OrangeRed);
             }
 
             return results;
         }
 
         // =========================================================================
-        //  CORE LOGIC — FILL (AUTO DETECT tab)  (unchanged)
+        //  FILL (AUTO DETECT tab)
         // =========================================================================
+
         private async Task FillAutoDetected(string url, bool dryRun, int delayMs, CancellationToken ct)
         {
             List<FieldInfo> selectedFields = new List<FieldInfo>();
@@ -478,18 +649,20 @@ namespace ThreatScanner
             if (dryRun)
             {
                 foreach (FieldInfo f in selectedFields)
-                    Log(string.Format("  [DRY] Would fill [{0}] -> \"{1}\"", f.Selector, f.SuggestedValue), Color.Cyan);
+                    Log(string.Format("  [DRY] Would fill [{0}] -> \"{1}\"",
+                        f.Selector, f.SuggestedValue), Color.Cyan);
                 return;
             }
 
             IPage page = await GetOrCreateActivePageAsync();
             if (page == null || page.IsClosed)
             {
-                Log("[Fill] No active page from Detect found. Run 'Detect Fields' first.", Color.OrangeRed);
+                Log("[Fill] No active page. Run 'Detect Fields' first.", Color.OrangeRed);
                 return;
             }
 
-            Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)", page.Url, page.Frames.Count, selectedFields.Count));
+            Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)",
+                page.Url, page.Frames.Count, selectedFields.Count));
 
             HashSet<FieldInfo> handled = new HashSet<FieldInfo>();
             foreach (IFrame frame in page.Frames)
@@ -497,13 +670,17 @@ namespace ThreatScanner
 
             int missed = selectedFields.Count - handled.Count;
             if (missed > 0)
-                Log(string.Format("[Fill] {0} selected field(s) were not found on the page (re-run Detect if the DOM changed).", missed), Color.OrangeRed);
+                Log(string.Format(
+                    "[Fill] {0} selected field(s) were not found on the page (re-run Detect if the DOM changed).",
+                    missed), Color.OrangeRed);
         }
 
         // =========================================================================
-        //  GRID-DRIVEN FRAME FILLER  (unchanged)
+        //  GRID-DRIVEN FRAME FILLER
         // =========================================================================
-        private async Task FillFrameFromGrid(IFrame frame, IPage page, List<FieldInfo> selectedFields, HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
+
+        private async Task FillFrameFromGrid(IFrame frame, IPage page, List<FieldInfo> selectedFields,
+            HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
         {
             foreach (FieldInfo f in selectedFields)
             {
@@ -514,7 +691,8 @@ namespace ThreatScanner
                 try { el = await frame.QuerySelectorAsync(f.Selector); }
                 catch (Exception ex)
                 {
-                    Log(string.Format("  SKIP   [{0}] invalid selector: {1}", f.Selector, ex.Message), Color.OrangeRed);
+                    Log(string.Format("  SKIP   [{0}] invalid selector: {1}", f.Selector, ex.Message),
+                        Color.OrangeRed);
                     continue;
                 }
                 if (el == null) continue;
@@ -523,7 +701,8 @@ namespace ThreatScanner
                 bool enabled = await el.IsEnabledAsync();
                 if (!visible || !enabled)
                 {
-                    Log(string.Format("  SKIP   [{0}] visible={1} enabled={2}", f.Selector, visible, enabled), Color.OrangeRed);
+                    Log(string.Format("  SKIP   [{0}] visible={1} enabled={2}", f.Selector, visible, enabled),
+                        Color.OrangeRed);
                     handled.Add(f);
                     continue;
                 }
@@ -554,7 +733,11 @@ namespace ThreatScanner
                         foreach (IElementHandle opt in opts)
                         {
                             string v = await opt.GetAttributeAsync("value") ?? "";
-                            if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1") { val = v; break; }
+                            if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1")
+                            {
+                                val = v;
+                                break;
+                            }
                         }
                     }
                     if (!string.IsNullOrEmpty(val))
@@ -569,7 +752,6 @@ namespace ThreatScanner
                     string filePath = f.SuggestedValue;
                     if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
                     {
-                        // Regenerate from hint if stored path is missing
                         string hint2 = (f.Name + " " + f.Id + " " + f.Label).ToLowerInvariant();
                         filePath = GetDummyFilePath(hint2);
                     }
@@ -580,11 +762,11 @@ namespace ThreatScanner
                 else if (type == "date" || type == "time" || type == "week" ||
                          type == "month" || type == "range" || type == "color")
                 {
-                    // Browsers require programmatic value assignment for these types;
-                    // keyboard typing is ignored or produces invalid input.
                     string value = f.SuggestedValue;
                     if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
-                    await el.EvaluateAsync("(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", value);
+                    await el.EvaluateAsync(
+                        "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }",
+                        value);
                     Log(string.Format("  FILL   [{0}] ({1}) -> \"{2}\" [via JS]", f.Selector, type, value));
                     handled.Add(f);
                 }
@@ -611,11 +793,15 @@ namespace ThreatScanner
         }
 
         // =========================================================================
-        //  DYNAMIC FRAME FILLER  (unchanged)
+        //  DYNAMIC FRAME FILLER
         // =========================================================================
+
         private async Task FillFrameDynamic(IFrame frame, IPage page, int delayMs, CancellationToken ct)
         {
-            IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync("input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea");
+            IReadOnlyList<IElementHandle> inputs = await frame.QuerySelectorAllAsync(
+                "input:not([type='hidden']):not([type='submit']):not([type='button'])" +
+                ":not([type='reset']):not([type='image']):not([type='checkbox'])" +
+                ":not([type='radio']):not([type='file']), textarea");
             IReadOnlyList<IElementHandle> fileInputs = await frame.QuerySelectorAllAsync("input[type='file']");
             IReadOnlyList<IElementHandle> selects = await frame.QuerySelectorAllAsync("select");
             IReadOnlyList<IElementHandle> checkboxes = await frame.QuerySelectorAllAsync("input[type='checkbox']");
@@ -623,7 +809,8 @@ namespace ThreatScanner
 
             if (inputs.Count == 0 && selects.Count == 0) return;
 
-            Log(string.Format("[Frame] {0}  |  {1} inputs, {2} selects", frame.Url, inputs.Count, selects.Count));
+            Log(string.Format("[Frame] {0}  |  {1} inputs, {2} selects",
+                frame.Url, inputs.Count, selects.Count));
 
             foreach (IElementHandle el in inputs)
             {
@@ -645,8 +832,11 @@ namespace ThreatScanner
                 if (type == "date" || type == "time" || type == "week" ||
                     type == "month" || type == "range" || type == "color")
                 {
-                    await el.EvaluateAsync("(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", value);
-                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\" [via JS]", type, Truncate(hint, 38), value));
+                    await el.EvaluateAsync(
+                        "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }",
+                        value);
+                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\" [via JS]",
+                        type, Truncate(hint, 38), value));
                 }
                 else
                 {
@@ -659,7 +849,8 @@ namespace ThreatScanner
                         await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
                     }
                     await page.Keyboard.PressAsync("Tab");
-                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\"", type, Truncate(hint, 38), value));
+                    Log(string.Format("  FILL  [{0}] \"{1}\" -> \"{2}\"",
+                        type, Truncate(hint, 38), value));
                 }
                 await Task.Delay(delayMs);
             }
@@ -680,7 +871,8 @@ namespace ThreatScanner
                 {
                     string v = await opt.GetAttributeAsync("value") ?? "";
                     string t = (await opt.InnerTextAsync()).Trim();
-                    if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1") valid.Add(new string[] { v, t });
+                    if (!string.IsNullOrWhiteSpace(v) && v != "0" && v != "-1")
+                        valid.Add(new string[] { v, t });
                 }
                 if (valid.Count == 0) continue;
 
@@ -699,7 +891,11 @@ namespace ThreatScanner
                 if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
                 string name = await el.GetAttributeAsync("name") ?? Guid.NewGuid().ToString();
                 if (checkedGroups.Contains(name)) continue;
-                if (!await el.IsCheckedAsync()) { await el.ScrollIntoViewIfNeededAsync(); await el.CheckAsync(); }
+                if (!await el.IsCheckedAsync())
+                {
+                    await el.ScrollIntoViewIfNeededAsync();
+                    await el.CheckAsync();
+                }
                 Log(string.Format("  CHECK  checkbox name=\"{0}\"", name));
                 checkedGroups.Add(name);
                 await Task.Delay(delayMs);
@@ -730,14 +926,16 @@ namespace ThreatScanner
                 string filePath = GetDummyFilePath(hint);
                 await el.ScrollIntoViewIfNeededAsync();
                 await el.SetInputFilesAsync(filePath);
-                Log(string.Format("  UPLOAD file-input name=\"{0}\" -> \"{1}\"", name, Path.GetFileName(filePath)));
+                Log(string.Format("  UPLOAD file-input name=\"{0}\" -> \"{1}\"",
+                    name, Path.GetFileName(filePath)));
                 await Task.Delay(delayMs);
             }
         }
 
         // =========================================================================
-        //  STATIC HELPERS  (unchanged)
+        //  STATIC HELPERS
         // =========================================================================
+
         private static async Task<string> GetLabelText(IFrame frame, string fieldId)
         {
             if (string.IsNullOrEmpty(fieldId)) return "";
@@ -759,55 +957,73 @@ namespace ThreatScanner
 
         private static string InferTextValue(string hint, string type)
         {
-            // ── Type-based checks first (highest priority) ────────────────────
-            if (type == "password" || hint.Contains("pass")) return string.Format("Pass{0}!A", Rng.Next(1000, 9999));
+            if (type == "password" || hint.Contains("pass"))
+                return string.Format("Pass{0}!A", Rng.Next(1000, 9999));
             if (type == "email" || hint.Contains("email") || hint.Contains("mail"))
-                return string.Format("{0}{1}@{2}", Pick(FirstNames).ToLower(), Rng.Next(10, 999), Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
-            // url/website must be checked before "user" so "user-url" doesn't become a username
+                return string.Format("{0}{1}@{2}",
+                    Pick(FirstNames).ToLower(), Rng.Next(10, 999),
+                    Pick(new[] { "gmail.com", "yahoo.com", "outlook.com" }));
             if (type == "url" || hint.Contains("url") || hint.Contains("website"))
                 return string.Format("https://{0}.com", Pick(FirstNames).ToLower());
-            // search field — return plausible keywords, not a username
             if (type == "search")
                 return Pick(new[] { "sample query", "test search", "keyword example", "auto fill test" });
-            // date/time/range/color handled by FillFrameFromGrid via JS; return the value string here for Detect display
-            if (type == "date") return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
-            if (type == "time") return string.Format("{0:D2}:{1:D2}", Rng.Next(8, 17), Rng.Next(0, 59));
-            if (type == "week") return string.Format("{0}-W{1:D2}", Rng.Next(2024, 2026), Rng.Next(1, 52));
-            if (type == "month") return string.Format("{0}-{1:D2}", Rng.Next(2020, 2026), Rng.Next(1, 12));
-            if (type == "range") return Rng.Next(3, 8).ToString();
-            if (type == "color") return Pick(new[] { "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA" });
+            if (type == "date")
+                return string.Format("{0:D4}-{1:D2}-{2:D2}",
+                    Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
+            if (type == "time")
+                return string.Format("{0:D2}:{1:D2}", Rng.Next(8, 17), Rng.Next(0, 59));
+            if (type == "week")
+                return string.Format("{0}-W{1:D2}", Rng.Next(2024, 2026), Rng.Next(1, 52));
+            if (type == "month")
+                return string.Format("{0}-{1:D2}", Rng.Next(2020, 2026), Rng.Next(1, 12));
+            if (type == "range")
+                return Rng.Next(3, 8).ToString();
+            if (type == "color")
+                return Pick(new[] { "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA" });
             if (type == "number" || hint.Contains("amount") || hint.Contains("qty"))
                 return Rng.Next(18, 65).ToString();
 
-            // ── Hint-based checks ─────────────────────────────────────────────
             if (hint.Contains("phone") || hint.Contains("mobile") || hint.Contains("tel") || hint.Contains("cel"))
                 return string.Format("09{0}", Rng.Next(100000000, 999999999));
-            if (hint.Contains("first") || hint.Contains("fname") || hint.Contains("given")) return Pick(FirstNames);
-            if (hint.Contains("middle") || hint.Contains("mname")) return Pick(MiddleNames);
-            if (hint.Contains("last") || hint.Contains("lname") || hint.Contains("surname")) return Pick(LastNames);
-            if (hint.Contains("suffix")) return Pick(new[] { "Jr.", "Sr.", "III" });
-            if (hint.Contains("fullname") || hint.Contains("full_name") || hint.Contains("full name") || hint.Contains("full-name"))
+            if (hint.Contains("first") || hint.Contains("fname") || hint.Contains("given"))
+                return Pick(FirstNames);
+            if (hint.Contains("middle") || hint.Contains("mname"))
+                return Pick(MiddleNames);
+            if (hint.Contains("last") || hint.Contains("lname") || hint.Contains("surname"))
+                return Pick(LastNames);
+            if (hint.Contains("suffix"))
+                return Pick(new[] { "Jr.", "Sr.", "III" });
+            if (hint.Contains("fullname") || hint.Contains("full_name") ||
+                hint.Contains("full name") || hint.Contains("full-name"))
                 return string.Format("{0} {1}", Pick(FirstNames), Pick(LastNames));
-            // username/login check AFTER url/website/full-name
             if (hint.Contains("user") || hint.Contains("login"))
-                return string.Format("{0}.{1}{2}", Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
-            if (hint.Contains("position") || hint.Contains("title") || hint.Contains("designation")) return Pick(Positions);
-            if (hint.Contains("department") || hint.Contains("dept")) return Pick(Departments);
-            if (hint.Contains("company") || hint.Contains("organization") || hint.Contains("org")) return Pick(Companies);
+                return string.Format("{0}.{1}{2}",
+                    Pick(FirstNames).ToLower(), Pick(LastNames).ToLower(), Rng.Next(10, 99));
+            if (hint.Contains("position") || hint.Contains("title") || hint.Contains("designation"))
+                return Pick(Positions);
+            if (hint.Contains("department") || hint.Contains("dept"))
+                return Pick(Departments);
+            if (hint.Contains("company") || hint.Contains("organization") || hint.Contains("org"))
+                return Pick(Companies);
             if (hint.Contains("address") || hint.Contains("street"))
                 return string.Format("{0} {1}", Rng.Next(1, 999), Pick(Streets));
-            if (hint.Contains("city") || hint.Contains("municipality")) return Pick(Cities);
-            if (hint.Contains("zip") || hint.Contains("postal")) return Rng.Next(1000, 9999).ToString();
-            if (hint.Contains("age")) return Rng.Next(18, 65).ToString();
+            if (hint.Contains("city") || hint.Contains("municipality"))
+                return Pick(Cities);
+            if (hint.Contains("zip") || hint.Contains("postal"))
+                return Rng.Next(1000, 9999).ToString();
+            if (hint.Contains("age"))
+                return Rng.Next(18, 65).ToString();
             if (hint.Contains("date") || hint.Contains("birth") || hint.Contains("dob"))
-                return string.Format("{0:D4}-{1:D2}-{2:D2}", Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
-            // datalist/autocomplete browser fields
-            if (hint.Contains("browser")) return Pick(new[] { "Google Chrome", "Mozilla Firefox", "Microsoft Edge", "Safari", "Opera" });
-            if (hint.Contains("note") || hint.Contains("remark") || hint.Contains("comment") || hint.Contains("description"))
+                return string.Format("{0:D4}-{1:D2}-{2:D2}",
+                    Rng.Next(1985, 2005), Rng.Next(1, 12), Rng.Next(1, 28));
+            if (hint.Contains("browser"))
+                return Pick(new[] { "Google Chrome", "Mozilla Firefox", "Microsoft Edge", "Safari", "Opera" });
+            if (hint.Contains("note") || hint.Contains("remark") ||
+                hint.Contains("comment") || hint.Contains("description"))
                 return "Auto-generated entry for testing purposes.";
 
-            // ── Generic fallback ──────────────────────────────────────────────
-            if (type == "text" || string.IsNullOrEmpty(type)) return string.Format("Value{0}", Rng.Next(100, 999));
+            if (type == "text" || string.IsNullOrEmpty(type))
+                return string.Format("Value{0}", Rng.Next(100, 999));
             return null;
         }
 
@@ -827,12 +1043,14 @@ namespace ThreatScanner
             if (hint.Contains("role") || hint.Contains("access"))
                 foreach (string pref in new[] { "USER", "ADMIN", "MANAGER" })
                     foreach (string[] opt in options)
-                        if (string.Equals(opt[0], pref, StringComparison.OrdinalIgnoreCase)) return opt[0];
+                        if (string.Equals(opt[0], pref, StringComparison.OrdinalIgnoreCase))
+                            return opt[0];
 
             return options[Rng.Next(options.Count)][0];
         }
 
         // ── UI helpers ────────────────────────────────────────────────────────
+
         private void SetRunning(bool running)
         {
             _running = running;
@@ -842,8 +1060,8 @@ namespace ThreatScanner
             button_FillForm.Text = running ? "Running..." : "▶  Start Fill";
         }
 
-        private void Log(string message, Color? color = null)
-            => ScanHelpers.LogRtbColor(richTextBox_Output, message, color);
+        private void Log(string message, Color? color = null) =>
+            ScanHelpers.LogRtbColor(richTextBox_Output, message, color);
 
         private void ApplyOutputTheme()
         {
@@ -852,9 +1070,12 @@ namespace ThreatScanner
         }
 
         private static T Pick<T>(T[] arr) => arr[Rng.Next(arr.Length)];
-        private static string Truncate(string s, int max) => s.Length <= max ? s : s.Substring(0, max) + "...";
 
-        // ─── FieldInfo DTO ────────────────────────────────────────────────────
+        private static string Truncate(string s, int max) =>
+            s.Length <= max ? s : s.Substring(0, max) + "...";
+
+        // ── FieldInfo DTO ─────────────────────────────────────────────────────
+
         private class FieldInfo
         {
             public string Tag { get; set; }
