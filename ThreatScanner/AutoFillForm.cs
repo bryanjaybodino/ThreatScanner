@@ -462,7 +462,7 @@ namespace ThreatScanner
             string[] submitKeywords = new string[]
             {
                 "submit", "save", "send", "confirm", "register",
-                "sign up", "sign in", "login", "next", "proceed", "apply"
+                "sign up", "sign in", "login", "next", "proceed", "apply","update","edit"
             };
 
             foreach (IFrame frame in page.Frames)
@@ -586,8 +586,7 @@ namespace ThreatScanner
                 Log(string.Format(
                     "[Detect][DIAG] frame[{0}] raw query counts -> inputs/textarea={1} selects={2} checkboxes={3} radios={4} fileInputs={5}",
                     frameIndex, inputs.Count, selects.Count, checkboxes.Count, radios.Count, fileInputs.Count), Color.Cyan);
-
-                int skippedInvisible = 0, skippedDisabled = 0, kept = 0;
+                int skippedInvisible = 0, skippedDisabled = 0, skippedOffscreen = 0, kept = 0;
 
                 foreach (IElementHandle el in inputs)
                 {
@@ -596,24 +595,49 @@ namespace ThreatScanner
                     if (!visible) { skippedInvisible++; continue; }
                     if (!enabled) { skippedDisabled++; continue; }
 
-                    string name = await el.GetAttributeAsync("name") ?? "";
+                    // ── OFF-SCREEN / HONEYPOT DETECTION ──────────────────────────────────
+                    // Checks if the element is pushed off-screen using malicious/honeypot CSS
+                    bool isOffscreen = await el.EvaluateAsync<bool>(@"
+                        el => {
+                            const rect = el.getBoundingClientRect();
+            
+                            // If the element is positioned far off-screen to the left or top
+                            if (rect.left < -500 || rect.top < -500) return true;
+            
+                            // If it has been crushed down to an un-clickable 1x1 pixel footprint
+                            if (rect.width <= 1 && rect.height <= 1) return true;
+            
+                            return false;
+                        }
+                    ");
+
+                    if (isOffscreen)
+                    {
+                        skippedOffscreen++;
+                        string name = await el.GetAttributeAsync("name") ?? "";
+                        Log(string.Format("[Detect] EXCLUDED [{0}] - Detected as visually hidden/off-screen honeypot.", name), Color.Gray);
+                        continue;
+                    }
+                    // ─────────────────────────────────────────────────────────────────────
+
+                    string nameAttr = await el.GetAttributeAsync("name") ?? "";
                     string id = await el.GetAttributeAsync("id") ?? "";
                     string type = await el.GetAttributeAsync("type") ?? "text";
                     string ph = await el.GetAttributeAsync("placeholder") ?? "";
                     string label = await GetLabelText(frame, id);
-                    string hint = (name + " " + id + " " + ph + " " + label).ToLowerInvariant();
+                    string hint = (nameAttr + " " + id + " " + ph + " " + label).ToLowerInvariant();
 
                     string ownerForm = "(eval failed)";
                     try
                     {
                         ownerForm = await el.EvaluateAsync<string>(@"
-                            el => {
-                                const f = el.closest('form');
-                                if (!f) return '(none)';
-                                const all = Array.from(document.forms);
-                                return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
-                            }
-                        ");
+                        el => {
+                            const f = el.closest('form');
+                            if (!f) return '(none)';
+                            const all = Array.from(document.forms);
+                            return '#' + all.indexOf(f) + ' id=' + (f.id || '') + ' name=' + (f.name || '');
+                        }
+                    ");
                     }
                     catch (Exception ownerEx)
                     {
@@ -622,20 +646,24 @@ namespace ThreatScanner
 
                     kept++;
                     Log(string.Format("[Detect][DIAG]    + input name='{0}' id='{1}' type='{2}' ownerForm={3}",
-                        name, id, type, ownerForm), Color.Gray);
+                        nameAttr, id, type, ownerForm), Color.Gray);
 
                     results.Add(new FieldInfo
                     {
                         Tag = "input",
-                        Name = name,
+                        Name = nameAttr,
                         Id = id,
                         Type = type,
                         Label = label,
-                        Selector = BuildSelector(name, id),
+                        Selector = BuildSelector(nameAttr, id),
                         SuggestedValue = InferTextValue(hint, type)
                     });
                 }
 
+                if (skippedOffscreen > 0)
+                {
+                    Log(string.Format("[Detect] Safely ignored {0} honeypot/off-screen field(s).", skippedOffscreen), Color.Yellow);
+                }
                 foreach (IElementHandle el in selects)
                 {
                     if (!await el.IsVisibleAsync() || !await el.IsEnabledAsync()) continue;
@@ -757,69 +785,11 @@ namespace ThreatScanner
         }
 
         // =========================================================================
-        //  FILL (AUTO DETECT tab)
-        // =========================================================================
-
-        private async Task FillAutoDetected(string url, bool dryRun, int delayMs, CancellationToken ct)
-        {
-            List<FieldInfo> selectedFields = new List<FieldInfo>();
-            foreach (DataGridViewRow row in dataGridView_Detected.Rows)
-            {
-                bool enabled = row.Cells["col_DetEnabled"].Value is true;
-                if (!enabled) continue;
-                selectedFields.Add(new FieldInfo
-                {
-                    Tag = row.Cells["col_DetTag"].Value?.ToString() ?? "",
-                    Name = row.Cells["col_DetName"].Value?.ToString() ?? "",
-                    Id = row.Cells["col_DetId"].Value?.ToString() ?? "",
-                    Type = row.Cells["col_DetType"].Value?.ToString() ?? "",
-                    Label = row.Cells["col_DetLabel"].Value?.ToString() ?? "",
-                    Selector = row.Cells["col_DetSelector"].Value?.ToString() ?? "",
-                    SuggestedValue = row.Cells["col_DetValue"].Value?.ToString() ?? ""
-                });
-            }
-
-            if (selectedFields.Count == 0)
-            {
-                Log("[Fill] No fields selected — tick at least one checkbox in the grid.", Color.OrangeRed);
-                return;
-            }
-
-            if (dryRun)
-            {
-                foreach (FieldInfo f in selectedFields)
-                    Log(string.Format("  [DRY] Would fill [{0}] -> \"{1}\"",
-                        f.Selector, f.SuggestedValue), Color.Cyan);
-                return;
-            }
-
-            IPage page = await GetOrCreateActivePageAsync();
-            if (page == null || page.IsClosed)
-            {
-                Log("[Fill] No active page. Run 'Detect Fields' first.", Color.OrangeRed);
-                return;
-            }
-
-            Log(string.Format("[Fill] Reusing detected page: {0}  ({1} frame(s), {2} field(s) selected)",
-                page.Url, page.Frames.Count, selectedFields.Count));
-
-            HashSet<FieldInfo> handled = new HashSet<FieldInfo>();
-            foreach (IFrame frame in page.Frames)
-                await FillFrameFromGrid(frame, page, selectedFields, handled, delayMs, ct);
-
-            int missed = selectedFields.Count - handled.Count;
-            if (missed > 0)
-                Log(string.Format(
-                    "[Fill] {0} selected field(s) were not found on the page (re-run Detect if the DOM changed).",
-                    missed), Color.OrangeRed);
-        }
-
-        // =========================================================================
         //  GRID-DRIVEN FRAME FILLER
         // =========================================================================
 
         private async Task FillFrameFromGrid(IFrame frame, IPage page, List<FieldInfo> selectedFields,
-            HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
+        HashSet<FieldInfo> handled, int delayMs, CancellationToken ct)
         {
             foreach (FieldInfo f in selectedFields)
             {
@@ -838,28 +808,49 @@ namespace ThreatScanner
 
                 bool visible = await el.IsVisibleAsync();
                 bool enabled = await el.IsEnabledAsync();
-                if (!visible || !enabled)
+
+                if (!enabled)
                 {
-                    Log(string.Format("  SKIP   [{0}] visible={1} enabled={2}", f.Selector, visible, enabled),
-                        Color.OrangeRed);
+                    Log(string.Format("  SKIP   [{0}] enabled={1}", f.Selector, enabled), Color.OrangeRed);
                     handled.Add(f);
                     continue;
                 }
 
-                await el.ScrollIntoViewIfNeededAsync();
-                await Task.Delay(Rng.Next(150, 300));
-
                 string type = f.Type.ToLowerInvariant();
+                string value = f.SuggestedValue;
 
+                // ── FALLBACK FOR CSS HIDDEN FIELDS ───────────────────────────────────
+                if (!visible)
+                {
+                    if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
+
+                    try
+                    {
+                        await el.EvaluateAsync(
+                            "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }",
+                            value);
+                        Log(string.Format("  FORCE  [{0}] ({1}) -> \"{2}\" [via JS/CSS Hidden]", f.Selector, type, value), Color.Yellow);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("  ERROR  [{0}] JS Force Fallback failed: {1}", f.Selector, ex.Message), Color.OrangeRed);
+                    }
+
+                    handled.Add(f);
+                    continue;
+                }
+
+                // ── VISIBLE FIELDS (EVEN IF OUT OF VIEWPORT / BELOW THE FORM) ────────
                 if (type == "checkbox")
                 {
-                    if (!await el.IsCheckedAsync()) await el.CheckAsync();
+                    // Bypass strict scroll positioning for out-of-viewport boxes using Force
+                    if (!await el.IsCheckedAsync()) await el.CheckAsync(new ElementHandleCheckOptions { Force = true });
                     Log(string.Format("  CHECK  [{0}]", f.Selector));
                     handled.Add(f);
                 }
                 else if (type == "radio")
                 {
-                    await el.CheckAsync();
+                    await el.CheckAsync(new ElementHandleCheckOptions { Force = true });
                     Log(string.Format("  RADIO  [{0}]", f.Selector));
                     handled.Add(f);
                 }
@@ -901,7 +892,6 @@ namespace ThreatScanner
                 else if (type == "date" || type == "time" || type == "week" ||
                          type == "month" || type == "range" || type == "color")
                 {
-                    string value = f.SuggestedValue;
                     if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
                     await el.EvaluateAsync(
                         "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }",
@@ -911,19 +901,35 @@ namespace ThreatScanner
                 }
                 else
                 {
-                    string value = f.SuggestedValue;
                     if (string.IsNullOrEmpty(value)) { handled.Add(f); continue; }
 
-                    await el.ClickAsync(new ElementHandleClickOptions { ClickCount = 3 });
-                    await Task.Delay(60);
-                    await page.Keyboard.PressAsync("Delete");
-                    foreach (char c in value)
+                    try
                     {
-                        await page.Keyboard.TypeAsync(c.ToString());
-                        await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
+                        // Fix: Focus the element directly using native JavaScript. 
+                        // This targets fields outside the current layout viewport safely.
+                        await el.FocusAsync();
+
+                        // Clear out existing values using JavaScript instead of standard 3x clicks
+                        await el.EvaluateAsync("el => { el.value = ''; }");
+                        await Task.Delay(50);
+
+                        // Type out the characters now that focus is forced on the target element
+                        foreach (char c in value)
+                        {
+                            await page.Keyboard.TypeAsync(c.ToString());
+                            await Task.Delay(Rng.Next(DELAY_MIN, DELAY_MAX));
+                        }
+                        await page.Keyboard.PressAsync("Tab");
+                        Log(string.Format("  FILL   [{0}] -> \"{1}\"", f.Selector, value));
                     }
-                    await page.Keyboard.PressAsync("Tab");
-                    Log(string.Format("  FILL   [{0}] -> \"{1}\"", f.Selector, value));
+                    catch (Exception)
+                    {
+                        // Fallback: If the keyboard focus completely fails due to layout isolation, drop to JS assignment
+                        await el.EvaluateAsync(
+                            "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }",
+                            value);
+                        Log(string.Format("  FILL   [{0}] -> \"{1}\" [via JS Fallback]", f.Selector, value), Color.Yellow);
+                    }
                     handled.Add(f);
                 }
 
