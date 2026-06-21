@@ -53,17 +53,10 @@ namespace ThreatScanner
                 return;
             }
 
-            // Post the actual creation to the UI message queue instead of doing
-            // it synchronously in the click handler. This lets the click event
-            // (and any pending paint messages for MainForm) finish first, so
-            // the button visibly responds before the heavier form starts
-            // laying out its controls — avoids the "click feels stuck" lag.
             BeginInvoke((Action)(() =>
             {
                 TForm form = factory();
 
-                // Batch the first layout pass instead of letting WinForms
-                // re-layout after every control is added/sized individually.
                 form.SuspendLayout();
                 try
                 {
@@ -74,15 +67,19 @@ namespace ThreatScanner
                     form.ResumeLayout(performLayout: true);
                 }
 
-                // Track it, and clear the slot the moment it closes so a later
-                // click creates a fresh instance instead of reusing a disposed
-                // (and therefore unusable) one.
                 _openForms[key] = form;
                 form.FormClosed += (s, e) =>
                 {
                     if (_openForms.TryGetValue(key, out var tracked) && ReferenceEquals(tracked, form))
                         _openForms.Remove(key);
+
+                    // Sub-form closed -> bring MainForm back
+                    this.Show();
+                    FocusExisting(this);
                 };
+
+                // Sub-form opening -> hide MainForm
+                this.Hide();
 
                 form.Show();
                 FocusExisting(form);
@@ -138,6 +135,11 @@ namespace ThreatScanner
         private void button_OpenSqlInjection_Click(object sender, EventArgs e)
         {
             OpenOrFocus(() => new SqlInjectionForm());
+        }
+
+        private void button_OpenHttpProxyLog_Click(object sender, EventArgs e)
+        {
+            OpenOrFocus(() => new HttpProxyLogForm());
         }
     }
 }

@@ -15,19 +15,23 @@ namespace ThreatScanner
     /// </summary>
     public partial class ApiTesterForm : Form
     {
-        // The actual RichTextBox inside the JsonEditorHelper panel (JSON + Raw body input)
-        private RichTextBox _jsonEditor;
+        // CodeViewerHelper instance backing the JSON / Raw body input. Created
+        // in editable mode, so unlike the read-only viewer used in
+        // HttpProxyLogForm, this one accepts typing and gives you the same
+        // { } Format / ↵ Wrap / ⧉ Copy toolbar plus syntax highlighting on
+        // Format. Replaces the old JsonEditorHelper.
+        private CodeViewerHelper.CodeViewerControl _bodyEditor;
 
         public ApiTesterForm()
         {
             InitializeComponent();
 
-            // ── Inject the modern JSON editor into panel_JsonEditor ────────────
-            var editorPanel = JsonEditorHelper.Create(out _jsonEditor);
-            editorPanel.Dock = DockStyle.Fill;
-            panel_JsonEditor.Controls.Add(editorPanel);
+            // ── Inject the code-viewer-as-editor into panel_JsonEditor ────────
+            _bodyEditor = CodeViewerHelper.Create(editable: true);
+            _bodyEditor.Panel.Dock = DockStyle.Fill;
+            panel_JsonEditor.Controls.Add(_bodyEditor.Panel);
 
-            // ── Wire body-type radio buttons ──────────────────────────────────
+            // ── Wire body-type radio buttons ────────────────────────────────
             radioButton_BodyNone.CheckedChanged += (s, e) => UpdateBodyVisibility();
             radioButton_BodyForm.CheckedChanged += (s, e) => UpdateBodyVisibility();
             radioButton_BodyJson.CheckedChanged += (s, e) => UpdateBodyVisibility();
@@ -66,6 +70,14 @@ namespace ThreatScanner
 
             dataGridView_FormData.Visible = isForm;
             panel_JsonEditor.Visible = isJsonOrRaw;
+
+            // Keep the editor's language/highlighting in sync with which body
+            // type is selected — JSON gets JSON highlighting, Raw gets plain
+            // text (no Content-Type to infer from, since the user picks it).
+            if (radioButton_BodyJson.Checked)
+                _bodyEditor.SetLanguage(CodeLanguage.Json);
+            else if (radioButton_BodyRaw.Checked)
+                _bodyEditor.SetLanguage(CodeLanguage.Text);
         }
 
         // ─── SEND ─────────────────────────────────────────────────────────────────
@@ -96,7 +108,7 @@ namespace ThreatScanner
             var extraHeaders = ScanHelpers.GetEnabledGridRows(dataGridView_Headers, "col_HdrKey", "col_HdrValue");
             var formDataRows = ScanHelpers.GetEnabledGridRows(dataGridView_FormData, "col_FormKey", "col_FormValue");
 
-            string bodyText = _jsonEditor.Text;          // read from the injected editor
+            string bodyText = _bodyEditor.Text;           // read from the injected editor
             bool bodyIsJson = radioButton_BodyJson.Checked;
             bool bodyIsForm = radioButton_BodyForm.Checked;
             bool bodyIsRaw = radioButton_BodyRaw.Checked;

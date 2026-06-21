@@ -118,13 +118,20 @@
       <DependentUpon>FullScannerForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Helpers\CdpHelper.cs" />
+    <Compile Include="Helpers\CodeViewerHelper.cs" />
     <Compile Include="Helpers\FormParsingHelper.cs" />
     <Compile Include="Helpers\HtmlHelpers.cs" />
-    <Compile Include="Helpers\JsonEditorHelper.cs" />
+    <Compile Include="Helpers\ProxyModels.cs" />
     <Compile Include="Helpers\ScanHelpers.cs" />
     <Compile Include="Helpers\SessionDetectionHelper.cs" />
     <Compile Include="Helpers\SqlInjectionHelper.cs" />
     <Compile Include="Helpers\XssHelper.cs" />
+    <Compile Include="HttpProxyLogForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="HttpProxyLogForm.Designer.cs">
+      <DependentUpon>HttpProxyLogForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -165,6 +172,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="FullScannerForm.resx">
       <DependentUpon>FullScannerForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="HttpProxyLogForm.resx">
+      <DependentUpon>HttpProxyLogForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>

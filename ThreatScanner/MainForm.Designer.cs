@@ -34,6 +34,8 @@
             this.label_SubdomainDesc = new System.Windows.Forms.Label();
             this.button_OpenSqlInjection = new System.Windows.Forms.Button();
             this.label_SqlInjectionDesc = new System.Windows.Forms.Label();
+            this.button_OpenHttpProxyLog = new System.Windows.Forms.Button();
+            this.label_HttpProxyLogDesc = new System.Windows.Forms.Label();
             this.label_Disclaimer = new System.Windows.Forms.Label();
             this.panel_TopBar.SuspendLayout();
             this.panel_Cards.SuspendLayout();
@@ -91,11 +93,13 @@
             this.panel_Cards.Controls.Add(this.label_SubdomainDesc);
             this.panel_Cards.Controls.Add(this.button_OpenSqlInjection);
             this.panel_Cards.Controls.Add(this.label_SqlInjectionDesc);
+            this.panel_Cards.Controls.Add(this.button_OpenHttpProxyLog);
+            this.panel_Cards.Controls.Add(this.label_HttpProxyLogDesc);
             this.panel_Cards.Controls.Add(this.label_Disclaimer);
             this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_Cards.Location = new System.Drawing.Point(0, 80);
             this.panel_Cards.Name = "panel_Cards";
-            this.panel_Cards.Size = new System.Drawing.Size(1482, 460);
+            this.panel_Cards.Size = new System.Drawing.Size(1482, 640);
             this.panel_Cards.TabIndex = 0;
             // 
             // button_OpenScanner
@@ -330,29 +334,58 @@
             this.label_SqlInjectionDesc.TabIndex = 16;
             this.label_SqlInjectionDesc.Text = "Passive error-disclosure check\nwith remediation guidance";
             this.label_SqlInjectionDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            // 
+            //
+            // button_OpenHttpProxyLog
+            //
+            this.button_OpenHttpProxyLog.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.button_OpenHttpProxyLog.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.button_OpenHttpProxyLog.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button_OpenHttpProxyLog.FlatAppearance.BorderSize = 0;
+            this.button_OpenHttpProxyLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_OpenHttpProxyLog.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this.button_OpenHttpProxyLog.ForeColor = System.Drawing.Color.White;
+            this.button_OpenHttpProxyLog.Location = new System.Drawing.Point(30, 420);
+            this.button_OpenHttpProxyLog.Name = "button_OpenHttpProxyLog";
+            this.button_OpenHttpProxyLog.Size = new System.Drawing.Size(330, 100);
+            this.button_OpenHttpProxyLog.TabIndex = 17;
+            this.button_OpenHttpProxyLog.Text = "🌐  HTTP Proxy Log";
+            this.button_OpenHttpProxyLog.UseVisualStyleBackColor = false;
+            this.button_OpenHttpProxyLog.Click += new System.EventHandler(this.button_OpenHttpProxyLog_Click);
+            //
+            // label_HttpProxyLogDesc
+            //
+            this.label_HttpProxyLogDesc.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.label_HttpProxyLogDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label_HttpProxyLogDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label_HttpProxyLogDesc.Location = new System.Drawing.Point(30, 530);
+            this.label_HttpProxyLogDesc.Name = "label_HttpProxyLogDesc";
+            this.label_HttpProxyLogDesc.Size = new System.Drawing.Size(330, 50);
+            this.label_HttpProxyLogDesc.TabIndex = 18;
+            this.label_HttpProxyLogDesc.Text = "Logs every request/response made\nby your browser tab, live";
+            this.label_HttpProxyLogDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
             // label_Disclaimer
-            // 
+            //
             this.label_Disclaimer.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.label_Disclaimer.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Italic);
             this.label_Disclaimer.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(148)))), ((int)(((byte)(163)))), ((int)(((byte)(184)))));
-            this.label_Disclaimer.Location = new System.Drawing.Point(0, 432);
+            this.label_Disclaimer.Location = new System.Drawing.Point(0, 612);
             this.label_Disclaimer.Name = "label_Disclaimer";
             this.label_Disclaimer.Size = new System.Drawing.Size(1482, 28);
             this.label_Disclaimer.TabIndex = 14;
             this.label_Disclaimer.Text = "⚠️  For authorized penetration testing only. Unauthorized use is illegal.";
             this.label_Disclaimer.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            // 
+            //
             // MainForm
-            // 
+            //
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
-            this.ClientSize = new System.Drawing.Size(1482, 540);
+            this.ClientSize = new System.Drawing.Size(1482, 720);
             this.Controls.Add(this.panel_Cards);
             this.Controls.Add(this.panel_TopBar);
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.MinimumSize = new System.Drawing.Size(1500, 580);
+            this.MinimumSize = new System.Drawing.Size(1500, 760);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "ThreatScanner — Select Tool";
@@ -385,6 +418,8 @@
         private System.Windows.Forms.Label label_SubdomainDesc;
         private System.Windows.Forms.Button button_OpenSqlInjection;
         private System.Windows.Forms.Label label_SqlInjectionDesc;
+        private System.Windows.Forms.Button button_OpenHttpProxyLog;
+        private System.Windows.Forms.Label label_HttpProxyLogDesc;
         private System.Windows.Forms.Label label_Disclaimer;
     }
 }

@@ -1,0 +1,340 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BotAutoFill</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --border: #2a2d3e;
+            --accent: #6c63ff;
+            --accent-glow: rgba(108, 99, 255, 0.25);
+            --success: #22c55e;
+            --error: #ef4444;
+            --warn: #f59e0b;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --radius: 8px;
+            --font: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            width: 340px;
+            min-height: 420px;
+            overflow-x: hidden;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            box-shadow: 0 0 12px var(--accent-glow);
+            flex-shrink: 0;
+        }
+
+        .header-text h1 {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: .3px;
+            color: var(--text);
+        }
+
+        .header-text p {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        /* ── Status badge ── */
+        .status-bar {
+            margin: 12px 14px 0;
+            padding: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+            flex-shrink: 0;
+        }
+
+            .dot.ready {
+                background: var(--success);
+                box-shadow: 0 0 6px var(--success);
+            }
+
+            .dot.busy {
+                background: var(--warn);
+                animation: pulse 1s infinite;
+            }
+
+            .dot.error {
+                background: var(--error);
+            }
+
+        @keyframes pulse {
+            0%,100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .3;
+            }
+        }
+
+        /* ── Controls ── */
+        .controls {
+            padding: 12px 14px;
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            border: none;
+            border-radius: var(--radius);
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s, transform .1s;
+            padding: 10px 14px;
+        }
+
+            button:active {
+                transform: scale(.97);
+            }
+
+            button:disabled {
+                opacity: .45;
+                cursor: not-allowed;
+            }
+
+        #btn-fill {
+            flex: 1;
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 2px 12px var(--accent-glow);
+        }
+
+            #btn-fill:hover:not(:disabled) {
+                opacity: .88;
+            }
+
+        #btn-clear {
+            background: var(--surface);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+
+            #btn-clear:hover:not(:disabled) {
+                color: var(--text);
+                border-color: var(--muted);
+            }
+
+        /* ── Progress bar ── */
+        .progress-wrap {
+            margin: 0 14px 8px;
+            height: 3px;
+            background: var(--border);
+            border-radius: 99px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+            .progress-wrap.active {
+                opacity: 1;
+            }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width .3s ease;
+            border-radius: 99px;
+        }
+
+        /* ── Log ── */
+        .log-header {
+            padding: 0 14px 6px;
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #log-count {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            padding: 1px 7px;
+            font-size: 10px;
+            color: var(--muted);
+        }
+
+        #log {
+            margin: 0 14px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 11.5px;
+            font-family: 'Consolas', 'Fira Code', monospace;
+        }
+
+            #log::-webkit-scrollbar {
+                width: 4px;
+            }
+
+            #log::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            #log::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 4px;
+            }
+
+        .log-row {
+            padding: 5px 10px;
+            border-bottom: 1px solid var(--border);
+            display: grid;
+            grid-template-columns: 14px 46px 1fr;
+            gap: 6px;
+            align-items: start;
+            line-height: 1.4;
+        }
+
+            .log-row:last-child {
+                border-bottom: none;
+            }
+
+        .log-icon {
+            font-size: 10px;
+            padding-top: 1px;
+        }
+
+        .log-kind {
+            color: var(--accent);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            padding-top: 1px;
+        }
+
+        .log-text {
+            color: var(--text);
+            word-break: break-all;
+        }
+
+        .log-val {
+            color: var(--success);
+        }
+
+        .log-err {
+            color: var(--error);
+        }
+
+        .empty-log {
+            padding: 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+            font-family: var(--font);
+        }
+
+        /* ── Tip ── */
+        .tip {
+            margin: 0 14px 12px;
+            padding: 8px 10px;
+            background: rgba(108,99,255,.08);
+            border: 1px solid rgba(108,99,255,.2);
+            border-radius: var(--radius);
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+            .tip strong {
+                color: var(--accent);
+            }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">🤖</div>
+        <div class="header-text">
+            <h1>BotAutoFill</h1>
+            <p>Dynamic form auto-filler</p>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="dot" id="dot"></div>
+        <span id="status-text">Ready to fill</span>
+    </div>
+
+    <div class="controls">
+        <button id="btn-fill">⚡ Fill Form</button>
+        <button id="btn-clear">✕ Clear</button>
+    </div>
+
+    <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <div class="log-header">
+        <span>Activity Log</span>
+        <span id="log-count">0 fields</span>
+    </div>
+    <div id="log">
+        <div class="empty-log">Click "Fill Form" to start</div>
+    </div>
+
+    <div class="tip">
+        <strong>Tip:</strong> Works on any page — inputs, selects, Select2, checkboxes, radio buttons. Skips hidden, disabled, and read-only fields.
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
