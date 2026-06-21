@@ -63,6 +63,8 @@
             this.panel_Output = new System.Windows.Forms.Panel();
             this.richTextBox_Output = new System.Windows.Forms.RichTextBox();
             this.label_Output = new System.Windows.Forms.Label();
+            this.label1 = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
             this.panel_TopBar.SuspendLayout();
             this.panel_RequestBar.SuspendLayout();
             this.panel_Grid.SuspendLayout();
@@ -155,6 +157,8 @@
             // panel_RequestBar
             // 
             this.panel_RequestBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
+            this.panel_RequestBar.Controls.Add(this.label2);
+            this.panel_RequestBar.Controls.Add(this.label1);
             this.panel_RequestBar.Controls.Add(this.label_Filter);
             this.panel_RequestBar.Controls.Add(this.textBox_Filter);
             this.panel_RequestBar.Controls.Add(this.button_StartCapture);
@@ -174,7 +178,7 @@
             this.label_Filter.AutoSize = true;
             this.label_Filter.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.label_Filter.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(65)))), ((int)(((byte)(85)))));
-            this.label_Filter.Location = new System.Drawing.Point(16, 14);
+            this.label_Filter.Location = new System.Drawing.Point(292, 16);
             this.label_Filter.Name = "label_Filter";
             this.label_Filter.Size = new System.Drawing.Size(275, 20);
             this.label_Filter.TabIndex = 0;
@@ -183,9 +187,9 @@
             // textBox_Filter
             // 
             this.textBox_Filter.Font = new System.Drawing.Font("Segoe UI", 10F);
-            this.textBox_Filter.Location = new System.Drawing.Point(16, 38);
+            this.textBox_Filter.Location = new System.Drawing.Point(292, 40);
             this.textBox_Filter.Name = "textBox_Filter";
-            this.textBox_Filter.Size = new System.Drawing.Size(300, 30);
+            this.textBox_Filter.Size = new System.Drawing.Size(452, 30);
             this.textBox_Filter.TabIndex = 1;
             this.textBox_Filter.TextChanged += new System.EventHandler(this.textBox_Filter_TextChanged);
             // 
@@ -197,7 +201,7 @@
             this.button_StartCapture.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_StartCapture.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.button_StartCapture.ForeColor = System.Drawing.Color.White;
-            this.button_StartCapture.Location = new System.Drawing.Point(330, 36);
+            this.button_StartCapture.Location = new System.Drawing.Point(16, 14);
             this.button_StartCapture.Name = "button_StartCapture";
             this.button_StartCapture.Size = new System.Drawing.Size(150, 31);
             this.button_StartCapture.TabIndex = 2;
@@ -214,7 +218,7 @@
             this.button_StopCapture.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_StopCapture.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.button_StopCapture.ForeColor = System.Drawing.Color.White;
-            this.button_StopCapture.Location = new System.Drawing.Point(490, 36);
+            this.button_StopCapture.Location = new System.Drawing.Point(176, 14);
             this.button_StopCapture.Name = "button_StopCapture";
             this.button_StopCapture.Size = new System.Drawing.Size(110, 31);
             this.button_StopCapture.TabIndex = 3;
@@ -236,7 +240,7 @@
             "DELETE",
             "HEAD",
             "OPTIONS"});
-            this.comboBox_MethodFilter.Location = new System.Drawing.Point(623, 11);
+            this.comboBox_MethodFilter.Location = new System.Drawing.Point(750, 40);
             this.comboBox_MethodFilter.Name = "comboBox_MethodFilter";
             this.comboBox_MethodFilter.Size = new System.Drawing.Size(115, 28);
             this.comboBox_MethodFilter.TabIndex = 6;
@@ -255,7 +259,7 @@
             "5xx",
             "Failed",
             "Pending"});
-            this.comboBox_StatusFilter.Location = new System.Drawing.Point(748, 11);
+            this.comboBox_StatusFilter.Location = new System.Drawing.Point(875, 40);
             this.comboBox_StatusFilter.Name = "comboBox_StatusFilter";
             this.comboBox_StatusFilter.Size = new System.Drawing.Size(115, 28);
             this.comboBox_StatusFilter.TabIndex = 7;
@@ -275,9 +279,9 @@
             // 
             // progressBar_Capture
             // 
-            this.progressBar_Capture.Location = new System.Drawing.Point(623, 45);
+            this.progressBar_Capture.Location = new System.Drawing.Point(18, 51);
             this.progressBar_Capture.Name = "progressBar_Capture";
-            this.progressBar_Capture.Size = new System.Drawing.Size(240, 22);
+            this.progressBar_Capture.Size = new System.Drawing.Size(268, 12);
             this.progressBar_Capture.TabIndex = 5;
             // 
             // panel_Grid
@@ -690,6 +694,28 @@
             this.label_Output.TabIndex = 0;
             this.label_Output.Text = "LOG";
             // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(65)))), ((int)(((byte)(85)))));
+            this.label1.Location = new System.Drawing.Point(746, 17);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(61, 20);
+            this.label1.TabIndex = 8;
+            this.label1.Text = "Method";
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(65)))), ((int)(((byte)(85)))));
+            this.label2.Location = new System.Drawing.Point(871, 16);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(49, 20);
+            this.label2.TabIndex = 9;
+            this.label2.Text = "Status";
+            // 
             // HttpProxyLogForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
@@ -701,7 +727,7 @@
             this.Controls.Add(this.panel_RequestBar);
             this.Controls.Add(this.panel_TopBar);
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.MinimumSize = new System.Drawing.Size(1000, 600);
+            this.MinimumSize = new System.Drawing.Size(1298, 787);
             this.Name = "HttpProxyLogForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "ThreatScanner — HTTP Proxy Log";
@@ -783,5 +809,7 @@
         private System.Windows.Forms.Panel panel_Output;
         private System.Windows.Forms.RichTextBox richTextBox_Output;
         private System.Windows.Forms.Label label_Output;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.Label label1;
     }
 }
