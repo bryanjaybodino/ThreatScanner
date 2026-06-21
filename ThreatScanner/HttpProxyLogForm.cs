@@ -8,6 +8,8 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using ThreatScanner.Helpers;
 
@@ -18,11 +20,9 @@ namespace ThreatScanner
         // ── CDP / Playwright state ──────────────────────────────────────────────
         private CdpHelper _cdp;
         private IBrowserContext _context;
+        private IPage _interceptPage;          // page we attach RouteAsync to
         private bool _capturing = false;
 
-        // Request id (object hash of the Playwright IRequest) -> captured entry.
-        // The grid row itself carries the same entry via DataGridViewRow.Tag,
-        // so either the id or the row can be used to look an entry back up.
         private readonly ConcurrentDictionary<string, ProxyEntry> _entriesById =
             new ConcurrentDictionary<string, ProxyEntry>();
         private readonly ConcurrentDictionary<string, int> _rowIndexByRequestId =
@@ -33,17 +33,29 @@ namespace ThreatScanner
         private long _totalCaptured = 0;
         private ProxyEntry _selectedEntry = null;
 
-        // Code viewer panels for the Request/Response body tabs — built once
-        // and re-filled via SetContent() whenever the grid selection changes.
         private CodeViewerHelper.CodeViewerControl _reqBodyViewer;
         private CodeViewerHelper.CodeViewerControl _respBodyViewer;
 
         private static readonly HttpClient _replayClient = new HttpClient();
 
-        // Debounces textBox_Filter so typing doesn't re-scan every row in the
-        // grid on every single keystroke — only after the user pauses.
-        private readonly System.Windows.Forms.Timer _filterDebounce = new System.Windows.Forms.Timer { Interval = 200 };
+        private readonly System.Windows.Forms.Timer _filterDebounce =
+            new System.Windows.Forms.Timer { Interval = 200 };
 
+        // ── INTERCEPT state ────────────────────────────────────────────────────
+        // Pending intercepts: requestId → TaskCompletionSource that the route
+        // handler blocks on.  Resolving it with true = forward, false = drop.
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingIntercepts =
+            new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
+
+        // The actual IRoute for each pending request (needed to call ContinueAsync / AbortAsync)
+        private readonly ConcurrentDictionary<string, IRoute> _pendingRoutes =
+            new ConcurrentDictionary<string, IRoute>();
+
+        // Which resource types are being intercepted (driven by the checkboxes)
+        private readonly HashSet<string> _interceptedTypes =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // ── ctor ───────────────────────────────────────────────────────────────
 
         public HttpProxyLogForm()
         {
@@ -68,9 +80,26 @@ namespace ThreatScanner
                 ReapplyAllRowFilters();
             };
 
+            // Wire intercept checkboxes
+            chk_Intercept_XHR.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Fetch.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Document.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Script.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Image.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Font.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_CSS.CheckedChanged += OnInterceptCheckChanged;
+            chk_Intercept_Other.CheckedChanged += OnInterceptCheckChanged;
+
+            // Wire intercept queue buttons
+            btn_Intercept_Forward.Click += Btn_Intercept_Forward_Click;
+            btn_Intercept_Drop.Click += Btn_Intercept_Drop_Click;
+            btn_Intercept_ForwardAll.Click += Btn_Intercept_ForwardAll_Click;
+            btn_Intercept_DropAll.Click += Btn_Intercept_DropAll_Click;
+
             this.FormClosing += HttpProxyLogForm_FormClosing;
             SetCapturing(false);
             ShowDetail(null);
+            UpdateInterceptQueueUI();
         }
 
         // ── START / STOP ─────────────────────────────────────────────────────────
@@ -78,7 +107,6 @@ namespace ThreatScanner
         private async void button_StartCapture_Click(object sender, EventArgs e)
         {
             if (_capturing) return;
-
             SetCapturing(true);
             Log("[Proxy] Connecting to browser…");
 
@@ -86,12 +114,18 @@ namespace ThreatScanner
             {
                 IPage page = await _cdp.GetOrCreateActivePageAsync();
                 _context = page.Context;
+                _interceptPage = page;
 
                 _context.Request += OnRequest;
                 _context.Response += OnResponse;
                 _context.RequestFailed += OnRequestFailed;
 
+                // Register a catch-all route; we decide per-request whether to intercept
+                await page.RouteAsync("**/*", HandleRouteAsync);
+
                 Log("[Proxy] Capturing started. Browse normally — every request the browser makes will be logged here.", Color.LimeGreen);
+                if (_interceptedTypes.Count > 0)
+                    Log("[Intercept] Active for: " + string.Join(", ", _interceptedTypes), Color.Cyan);
             }
             catch (Exception ex)
             {
@@ -100,14 +134,18 @@ namespace ThreatScanner
             }
         }
 
-        private void button_StopCapture_Click(object sender, EventArgs e)
-        {
-            StopCapture();
-        }
+        private void button_StopCapture_Click(object sender, EventArgs e) => StopCapture();
 
         private void StopCapture()
         {
             if (!_capturing) return;
+
+            // Release all pending intercepts so their handler threads don't leak
+            foreach (var kv in _pendingIntercepts)
+                kv.Value.TrySetResult(true);   // forward anything still held
+
+            _pendingIntercepts.Clear();
+            _pendingRoutes.Clear();
 
             if (_context != null)
             {
@@ -117,11 +155,18 @@ namespace ThreatScanner
                     _context.Response -= OnResponse;
                     _context.RequestFailed -= OnRequestFailed;
                 }
-                catch { /* context may already be gone */ }
+                catch { }
+            }
+
+            if (_interceptPage != null)
+            {
+                try { _ = _interceptPage.UnrouteAllAsync(); } catch { }
+                _interceptPage = null;
             }
 
             SetCapturing(false);
             Log("[Proxy] Capturing stopped.", Color.Orange);
+            RunOnUi(UpdateInterceptQueueUI);
         }
 
         private void HttpProxyLogForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -131,7 +176,50 @@ namespace ThreatScanner
             try { _filterDebounce.Stop(); _filterDebounce.Dispose(); } catch { }
         }
 
-        // ── EVENT HANDLERS (these fire on Playwright's own thread) ──────────────
+        // ── ROUTE HANDLER (intercept gate) ────────────────────────────────────
+        // Called by Playwright on its own thread for every request that matches "**/*".
+        // If interception is enabled for this resource type, we pause here until the
+        // user clicks Forward or Drop.  Otherwise we immediately continue.
+
+        private async Task HandleRouteAsync(IRoute route)
+        {
+            IRequest req = route.Request;
+            string type = req.ResourceType ?? "other";
+            string id = RequestKey(req);
+
+            bool shouldIntercept;
+            lock (_interceptedTypes)
+                shouldIntercept = _interceptedTypes.Contains(type) ||
+                                  (_interceptedTypes.Contains("other") &&
+                                   !new[] { "xhr", "fetch", "document", "script", "image", "font", "stylesheet" }.Contains(type));
+
+            if (!shouldIntercept)
+            {
+                await route.ContinueAsync();
+                return;
+            }
+
+            // Park the request — add to the intercept queue UI, then block
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingIntercepts[id] = tcs;
+            _pendingRoutes[id] = route;
+
+            RunOnUi(() => AddToInterceptQueue(id, req.Method, type, req.Url));
+
+            bool forward = await tcs.Task;   // blocks until user decides
+
+            _pendingIntercepts.TryRemove(id, out _);
+            _pendingRoutes.TryRemove(id, out _);
+
+            try
+            {
+                if (forward) await route.ContinueAsync();
+                else await route.AbortAsync();
+            }
+            catch { /* page may have navigated away */ }
+        }
+
+        // ── REQUEST / RESPONSE EVENTS ─────────────────────────────────────────
 
         private async void OnRequest(object sender, IRequest request)
         {
@@ -189,10 +277,10 @@ namespace ThreatScanner
                 if (bodyBytes != null)
                 {
                     try { respBody = Encoding.UTF8.GetString(bodyBytes); }
-                    catch { respBody = null; /* binary payload, e.g. images/fonts */ }
+                    catch { respBody = null; }
                 }
             }
-            catch { /* some responses (e.g. redirects, opaque) have no body */ }
+            catch { }
 
             List<KeyValuePair<string, string>> respHeaders;
             try { respHeaders = (await response.AllHeadersAsync())?.Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value)).ToList(); }
@@ -234,7 +322,7 @@ namespace ThreatScanner
                         : (response.Status >= 300 ? Color.DarkOrange : dataGridView_Requests.DefaultCellStyle.ForeColor);
 
                     if (entry != null) ApplyRowFilterVisibility(row, entry);
-                    if (entry != null && entry == _selectedEntry) ShowDetail(entry); // refresh open detail live
+                    if (entry != null && entry == _selectedEntry) ShowDetail(entry);
                 }
             });
         }
@@ -261,21 +349,133 @@ namespace ThreatScanner
             });
         }
 
-        // Playwright's IRequest doesn't expose the raw CDP requestId, but each
-        // IRequest instance is stable for the lifetime of that request, so the
-        // object's identity hash is a perfectly good correlation key here.
         private static string RequestKey(IRequest request) =>
             request.GetHashCode().ToString();
+
+        // ── INTERCEPT QUEUE UI ────────────────────────────────────────────────
+
+        private void OnInterceptCheckChanged(object sender, EventArgs e)
+        {
+            lock (_interceptedTypes)
+            {
+                _interceptedTypes.Clear();
+                if (chk_Intercept_XHR.Checked) _interceptedTypes.Add("xhr");
+                if (chk_Intercept_Fetch.Checked) _interceptedTypes.Add("fetch");
+                if (chk_Intercept_Document.Checked) _interceptedTypes.Add("document");
+                if (chk_Intercept_Script.Checked) _interceptedTypes.Add("script");
+                if (chk_Intercept_Image.Checked) _interceptedTypes.Add("image");
+                if (chk_Intercept_Font.Checked) _interceptedTypes.Add("font");
+                if (chk_Intercept_CSS.Checked) _interceptedTypes.Add("stylesheet");
+                if (chk_Intercept_Other.Checked) _interceptedTypes.Add("other");
+            }
+
+            string active = _interceptedTypes.Count > 0
+                ? "Intercepting: " + string.Join(", ", _interceptedTypes)
+                : "Interception off";
+            label_InterceptStatus.Text = active;
+            label_InterceptStatus.ForeColor = _interceptedTypes.Count > 0
+                ? Color.FromArgb(234, 88, 12)   // orange-600
+                : Color.FromArgb(100, 116, 139); // slate-500
+
+            if (_interceptedTypes.Count > 0 && _capturing)
+                Log("[Intercept] Now intercepting: " + string.Join(", ", _interceptedTypes), Color.Cyan);
+        }
+
+        // Add a row to the intercept queue listview
+        private void AddToInterceptQueue(string id, string method, string type, string url)
+        {
+            var item = new ListViewItem(method);
+            item.SubItems.Add(type);
+            item.SubItems.Add(url);
+            item.Tag = id;
+            item.ForeColor = Color.FromArgb(234, 88, 12);
+            listView_InterceptQueue.Items.Add(item);
+            UpdateInterceptQueueUI();
+            Log($"[Intercept] ⏸ {method} [{type}] {url}", Color.FromArgb(234, 179, 8));
+        }
+
+        private void RemoveFromInterceptQueue(string id)
+        {
+            foreach (ListViewItem item in listView_InterceptQueue.Items)
+            {
+                if (item.Tag as string == id)
+                {
+                    listView_InterceptQueue.Items.Remove(item);
+                    break;
+                }
+            }
+            UpdateInterceptQueueUI();
+        }
+
+        private void UpdateInterceptQueueUI()
+        {
+            int count = listView_InterceptQueue.Items.Count;
+            label_InterceptQueueCount.Text = count == 0
+                ? "No requests held"
+                : $"{count} request{(count == 1 ? "" : "s")} held";
+            label_InterceptQueueCount.ForeColor = count > 0
+                ? Color.FromArgb(234, 88, 12)
+                : Color.FromArgb(100, 116, 139);
+
+            bool hasSelected = listView_InterceptQueue.SelectedItems.Count > 0;
+            btn_Intercept_Forward.Enabled = hasSelected;
+            btn_Intercept_Drop.Enabled = hasSelected;
+            btn_Intercept_ForwardAll.Enabled = count > 0;
+            btn_Intercept_DropAll.Enabled = count > 0;
+        }
+
+        private void listView_InterceptQueue_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateInterceptQueueUI();
+        }
+
+        // Forward selected
+        private void Btn_Intercept_Forward_Click(object sender, EventArgs e)
+        {
+            foreach (ListViewItem item in listView_InterceptQueue.SelectedItems)
+                ResolveIntercept(item.Tag as string, forward: true);
+        }
+
+        // Drop selected
+        private void Btn_Intercept_Drop_Click(object sender, EventArgs e)
+        {
+            foreach (ListViewItem item in listView_InterceptQueue.SelectedItems)
+                ResolveIntercept(item.Tag as string, forward: false);
+        }
+
+        // Forward all
+        private void Btn_Intercept_ForwardAll_Click(object sender, EventArgs e)
+        {
+            var ids = listView_InterceptQueue.Items.Cast<ListViewItem>()
+                      .Select(i => i.Tag as string).ToList();
+            foreach (var id in ids) ResolveIntercept(id, forward: true);
+        }
+
+        // Drop all
+        private void Btn_Intercept_DropAll_Click(object sender, EventArgs e)
+        {
+            var ids = listView_InterceptQueue.Items.Cast<ListViewItem>()
+                      .Select(i => i.Tag as string).ToList();
+            foreach (var id in ids) ResolveIntercept(id, forward: false);
+        }
+
+        private void ResolveIntercept(string id, bool forward)
+        {
+            if (id == null) return;
+            if (_pendingIntercepts.TryGetValue(id, out var tcs))
+            {
+                tcs.TrySetResult(forward);
+                Log(forward ? $"[Intercept] ▶ Forwarded" : $"[Intercept] ✖ Dropped",
+                    forward ? Color.LimeGreen : Color.OrangeRed);
+            }
+            RemoveFromInterceptQueue(id);
+        }
 
         // ── DETAIL PANE ───────────────────────────────────────────────────────
 
         private void dataGridView_Requests_SelectionChanged(object sender, EventArgs e)
         {
-            if (dataGridView_Requests.SelectedRows.Count == 0)
-            {
-                ShowDetail(null);
-                return;
-            }
+            if (dataGridView_Requests.SelectedRows.Count == 0) { ShowDetail(null); return; }
             var entry = dataGridView_Requests.SelectedRows[0].Tag as ProxyEntry;
             ShowDetail(entry);
         }
@@ -283,7 +483,6 @@ namespace ThreatScanner
         private void ShowDetail(ProxyEntry entry)
         {
             _selectedEntry = entry;
-
             bool has = entry != null;
             button_Replay.Enabled = has;
             button_CopyCurl.Enabled = has;
@@ -314,7 +513,6 @@ namespace ThreatScanner
             var reqCt = entry?.RequestHeaders.FirstOrDefault(h => h.Key.Equals("content-type", StringComparison.OrdinalIgnoreCase)).Value;
             _reqBodyViewer.SetContent(has ? entry.RequestBody : "", CodeViewerHelper.DetectLanguage(reqCt));
             _respBodyViewer.SetContent(has ? entry.ResponseBody : "", CodeViewerHelper.DetectLanguage(entry?.ResponseContentType));
-
             textBox_Timing.Text = has ? BuildTimingText(entry) : "Select a request above to see timing details.";
         }
 
@@ -327,7 +525,6 @@ namespace ThreatScanner
             sb.AppendLine("Size:         " + FormatSize((int)entry.SizeBytes));
             sb.AppendLine("Total time:   " + (entry.DurationMs.HasValue ? Math.Round(entry.DurationMs.Value, 1) + " ms" : "n/a"));
             sb.AppendLine();
-
             var t = entry.Timing;
             if (t != null)
             {
@@ -340,10 +537,7 @@ namespace ThreatScanner
                 Line("Waiting (TTFB):", (t.ResponseStart >= 0 && t.RequestStart >= 0) ? t.ResponseStart - t.RequestStart : (double?)null);
                 Line("Content download:", (t.ResponseEnd >= 0 && t.ResponseStart >= 0) ? t.ResponseEnd - t.ResponseStart : (double?)null);
             }
-            else
-            {
-                sb.AppendLine("(Detailed CDP timing not available for this request.)");
-            }
+            else sb.AppendLine("(Detailed CDP timing not available for this request.)");
             return sb.ToString();
         }
 
@@ -353,7 +547,6 @@ namespace ThreatScanner
         {
             if (_selectedEntry == null) return;
             var entry = _selectedEntry;
-
             button_Replay.Enabled = false;
             Log("[Replay] " + entry.Method + " " + entry.Url);
             try
@@ -363,14 +556,12 @@ namespace ThreatScanner
                     var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                         { "host", "content-length", "connection", "accept-encoding" };
                     string contentType = "application/json";
-
                     foreach (var h in entry.RequestHeaders)
                     {
                         if (skip.Contains(h.Key) || h.Key.StartsWith(":")) continue;
                         if (h.Key.Equals("content-type", StringComparison.OrdinalIgnoreCase)) { contentType = h.Value; continue; }
                         req.Headers.TryAddWithoutValidation(h.Key, h.Value);
                     }
-
                     if (!string.IsNullOrEmpty(entry.RequestBody))
                         req.Content = new StringContent(entry.RequestBody, Encoding.UTF8, contentType.Split(';')[0]);
 
@@ -384,14 +575,8 @@ namespace ThreatScanner
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Log("[Replay] Failed: " + ex.Message, Color.OrangeRed);
-            }
-            finally
-            {
-                button_Replay.Enabled = true;
-            }
+            catch (Exception ex) { Log("[Replay] Failed: " + ex.Message, Color.OrangeRed); }
+            finally { button_Replay.Enabled = true; }
         }
 
         private void button_CopyCurl_Click(object sender, EventArgs e)
@@ -412,18 +597,11 @@ namespace ThreatScanner
 
         private void textBox_Filter_TextChanged(object sender, EventArgs e)
         {
-            // Restart the debounce timer instead of filtering immediately —
-            // typing a 6-character search term used to mean 6 full passes
-            // over every row in the grid, each one re-triggering DataGridView
-            // layout. Now it's one pass, 200ms after the user stops typing.
             _filterDebounce.Stop();
             _filterDebounce.Start();
         }
 
-        private void comboBox_Filters_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            ReapplyAllRowFilters();
-        }
+        private void comboBox_Filters_SelectedIndexChanged(object sender, EventArgs e) => ReapplyAllRowFilters();
 
         private void ReapplyAllRowFilters()
         {
@@ -436,17 +614,9 @@ namespace ThreatScanner
                     if (entry != null) ApplyRowFilterVisibility(row, entry);
                 }
             }
-            finally
-            {
-                dataGridView_Requests.ResumeLayout();
-            }
+            finally { dataGridView_Requests.ResumeLayout(); }
         }
 
-        /// <summary>
-        /// The substring filter only governs which *new* requests get logged
-        /// (cheaper than discarding afterwards), but the method/status combo
-        /// filters apply retroactively to whatever's already in the grid.
-        /// </summary>
         private void ApplyRowFilterVisibility(DataGridViewRow row, ProxyEntry entry)
         {
             bool visible = true;
@@ -478,13 +648,9 @@ namespace ThreatScanner
         private void RunOnUi(Action action)
         {
             if (IsDisposed) return;
-            try
-            {
-                if (InvokeRequired) BeginInvoke(action);
-                else action();
-            }
-            catch (ObjectDisposedException) { /* form closed mid-flight */ }
-            catch (InvalidOperationException) { /* handle not yet created */ }
+            try { if (InvokeRequired) BeginInvoke(action); else action(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
         }
 
         private string GetFilterTextThreadSafe()
@@ -545,7 +711,6 @@ namespace ThreatScanner
             })
             {
                 if (sfd.ShowDialog(this) != DialogResult.OK) return;
-
                 var sb = new StringBuilder();
                 sb.AppendLine("Time,Method,Status,Type,Size,CorrelationId,Url");
                 foreach (DataGridViewRow row in dataGridView_Requests.Rows)
@@ -562,7 +727,6 @@ namespace ThreatScanner
                         CsvEscape(row.Cells["col_Url"].Value)
                     }));
                 }
-
                 File.WriteAllText(sfd.FileName, sb.ToString());
                 Log("[Proxy] Saved log to " + sfd.FileName, Color.LimeGreen);
             }
