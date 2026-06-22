@@ -51,7 +51,7 @@ namespace ThreatScanner
         {
             if (_running) return;
 
-            string url = textBox_TargetUrl.Text.Trim();
+            string url = textBox_PageUrl.Text.Trim();
             string field = string.IsNullOrWhiteSpace(textBox_FieldName.Text) ? "file" : textBox_FieldName.Text.Trim();
 
             if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out _))
@@ -118,6 +118,17 @@ namespace ThreatScanner
 
         private async void button_AutoDetect_Click(object sender, EventArgs e)
         {
+            // ── CHANGE 1 ──────────────────────────────────────────────────────
+            // Read the page URL from textBox_PageUrl (Step 1) instead of
+            // assuming the user has already navigated the browser there.
+            string pageUrl = textBox_PageUrl.Text.Trim();
+            if (string.IsNullOrEmpty(pageUrl) || !Uri.TryCreate(pageUrl, UriKind.Absolute, out _))
+            {
+                Log("[!] Enter a valid page URL in Step 1 first.", Color.OrangeRed);
+                return;
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             button_AutoDetect.Enabled = false;
             label_DetectStatus.Text = "Connecting to browser…";
             Log("[*] Auto-detect: connecting to browser via CDP…", Color.DeepSkyBlue);
@@ -125,6 +136,18 @@ namespace ThreatScanner
             try
             {
                 IPage page = await _cdp.GetOrCreateActivePageAsync();
+
+                // ── CHANGE 1 (continued) ──────────────────────────────────────
+                // Navigate the CDP-controlled page to the URL the user entered
+                // so we always scan the right page, not whatever tab was open.
+                Log("[*] Navigating browser to " + pageUrl, Color.DeepSkyBlue);
+                await page.GotoAsync(pageUrl, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = 15000
+                });
+                // ─────────────────────────────────────────────────────────────
+
                 var info = await DetectFileUploadAsync(page);
 
                 if (info == null)
@@ -139,7 +162,7 @@ namespace ThreatScanner
                 _detectedMethod = info.Value.method;
 
                 textBox_FieldName.Text = _detectedFieldName;
-                textBox_TargetUrl.Text = _detectedAction;
+                textBox_PageUrl.Text = _detectedAction;   // POST endpoint only — pageUrl is kept in textBox_PageUrl
 
                 string multipartNote = info.Value.hasFile ? "" : "  ⚠ form is not multipart/form-data";
                 label_DetectStatus.Text = $"Found: name=\"{_detectedFieldName}\", method={_detectedMethod.ToUpperInvariant()}, action={_detectedAction}{multipartNote}";
@@ -203,6 +226,22 @@ namespace ThreatScanner
             try
             {
                 IPage page = await _cdp.GetOrCreateActivePageAsync();
+
+                // ── CHANGE 2 ──────────────────────────────────────────────────
+                // Navigate to the page URL (textBox_PageUrl) before re-detecting,
+                // for the same reason as Auto-Detect: the user should not have to
+                // manually navigate the browser before clicking Verify.
+                string pageUrl = textBox_PageUrl.Text.Trim();
+                if (!string.IsNullOrEmpty(pageUrl) && Uri.TryCreate(pageUrl, UriKind.Absolute, out _))
+                {
+                    Log("[*] Navigating browser to " + pageUrl, Color.DeepSkyBlue);
+                    await page.GotoAsync(pageUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 15000
+                    });
+                }
+                // ─────────────────────────────────────────────────────────────
 
                 // Re-detect every time — the user may have navigated since the
                 // last Auto-Detect, and submitting against a stale selector

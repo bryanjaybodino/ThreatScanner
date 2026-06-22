@@ -21,7 +21,7 @@
             this.button_ClearLog = new System.Windows.Forms.Button();
             this.panel_RequestBar = new System.Windows.Forms.Panel();
             this.label_TargetUrl = new System.Windows.Forms.Label();
-            this.textBox_TargetUrl = new System.Windows.Forms.TextBox();
+            this.textBox_PageUrl = new System.Windows.Forms.TextBox();
             this.label_FieldName = new System.Windows.Forms.Label();
             this.textBox_FieldName = new System.Windows.Forms.TextBox();
             this.button_RunTests = new System.Windows.Forms.Button();
@@ -142,7 +142,7 @@
             // 
             this.panel_RequestBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(249)))), ((int)(((byte)(250)))));
             this.panel_RequestBar.Controls.Add(this.label_TargetUrl);
-            this.panel_RequestBar.Controls.Add(this.textBox_TargetUrl);
+            this.panel_RequestBar.Controls.Add(this.textBox_PageUrl);
             this.panel_RequestBar.Controls.Add(this.label_FieldName);
             this.panel_RequestBar.Controls.Add(this.textBox_FieldName);
             this.panel_RequestBar.Controls.Add(this.button_RunTests);
@@ -168,13 +168,13 @@
             this.label_TargetUrl.TabIndex = 0;
             this.label_TargetUrl.Text = "Upload endpoint URL";
             // 
-            // textBox_TargetUrl
+            // textBox_PageUrl
             // 
-            this.textBox_TargetUrl.Font = new System.Drawing.Font("Segoe UI", 10F);
-            this.textBox_TargetUrl.Location = new System.Drawing.Point(16, 32);
-            this.textBox_TargetUrl.Name = "textBox_TargetUrl";
-            this.textBox_TargetUrl.Size = new System.Drawing.Size(560, 30);
-            this.textBox_TargetUrl.TabIndex = 1;
+            this.textBox_PageUrl.Font = new System.Drawing.Font("Segoe UI", 10F);
+            this.textBox_PageUrl.Location = new System.Drawing.Point(16, 32);
+            this.textBox_PageUrl.Name = "textBox_PageUrl";
+            this.textBox_PageUrl.Size = new System.Drawing.Size(560, 30);
+            this.textBox_PageUrl.TabIndex = 1;
             // 
             // label_FieldName
             // 
@@ -249,7 +249,7 @@
             this.button_AutoDetect.Name = "button_AutoDetect";
             this.button_AutoDetect.Size = new System.Drawing.Size(220, 30);
             this.button_AutoDetect.TabIndex = 7;
-            this.button_AutoDetect.Text = "🔍  Auto-Detect from Browser";
+            this.button_AutoDetect.Text = "🔍  Auto-Detect Form";
             this.button_AutoDetect.UseVisualStyleBackColor = false;
             this.button_AutoDetect.Click += new System.EventHandler(this.button_AutoDetect_Click);
             // 
@@ -265,7 +265,7 @@
             this.button_VerifySubmit.Name = "button_VerifySubmit";
             this.button_VerifySubmit.Size = new System.Drawing.Size(230, 30);
             this.button_VerifySubmit.TabIndex = 8;
-            this.button_VerifySubmit.Text = "🧪  Verify Submission via Browser";
+            this.button_VerifySubmit.Text = "🧪  Verify Submission";
             this.button_VerifySubmit.UseVisualStyleBackColor = false;
             this.button_VerifySubmit.Click += new System.EventHandler(this.button_VerifySubmit_Click);
             // 
@@ -704,7 +704,7 @@
         private System.Windows.Forms.Button button_ClearLog;
         private System.Windows.Forms.Panel panel_RequestBar;
         private System.Windows.Forms.Label label_TargetUrl;
-        private System.Windows.Forms.TextBox textBox_TargetUrl;
+        private System.Windows.Forms.TextBox textBox_PageUrl;
         private System.Windows.Forms.Label label_FieldName;
         private System.Windows.Forms.TextBox textBox_FieldName;
         private System.Windows.Forms.Button button_RunTests;
