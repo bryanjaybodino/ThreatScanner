@@ -39,6 +39,12 @@ namespace ThreatScanner.Helpers
     {
         // ── Identity ──────────────────────────────────────────────────────────
         public string Id { get; } = Guid.NewGuid().ToString("N");
+
+        /// <summary>The key this entry is stored under in the form's _entriesById /
+        /// _pendingIntercepts dictionaries (Playwright request-hash based, not <see cref="Id"/>).
+        /// Forward/Drop must resolve intercepts using THIS, not Id.</summary>
+        public string RequestId { get; set; }
+
         public DateTime Time { get; set; } = DateTime.Now;
 
         // ── Request ───────────────────────────────────────────────────────────
@@ -67,6 +73,9 @@ namespace ThreatScanner.Helpers
 
         public bool IsError => Error != null || Status >= 400;
         public bool IsPending => Status == 0 && Error == null;
+
+        /// <summary>True while this request is paused by the interceptor, waiting on Forward/Drop.</summary>
+        public bool IsHeld { get; set; }
 
         /// <summary>Cheap full-text search target: url + headers + bodies.</summary>
         public bool MatchesSearch(string term)

@@ -142,7 +142,11 @@ namespace ThreatScanner
 
             // Release all pending intercepts so their handler threads don't leak
             foreach (var kv in _pendingIntercepts)
+            {
                 kv.Value.TrySetResult(true);   // forward anything still held
+                var id = kv.Key;
+                if (_entriesById.TryGetValue(id, out var entry)) entry.IsHeld = false;
+            }
 
             _pendingIntercepts.Clear();
             _pendingRoutes.Clear();
@@ -199,17 +203,18 @@ namespace ThreatScanner
                 return;
             }
 
-            // Park the request — add to the intercept queue UI, then block
+            // Park the request — mark its grid row as held, then block
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingIntercepts[id] = tcs;
             _pendingRoutes[id] = route;
 
-            RunOnUi(() => AddToInterceptQueue(id, req.Method, type, req.Url));
+            RunOnUi(() => MarkRowHeld(id, req.Method, type, req.Url));
 
             bool forward = await tcs.Task;   // blocks until user decides
 
             _pendingIntercepts.TryRemove(id, out _);
             _pendingRoutes.TryRemove(id, out _);
+            RunOnUi(() => ClearRowHeld(id, dropped: !forward));
 
             try
             {
@@ -239,6 +244,7 @@ namespace ThreatScanner
 
             var entry = new ProxyEntry
             {
+                RequestId = id,
                 Time = DateTime.Now,
                 Method = request.Method,
                 Url = request.Url,
@@ -262,6 +268,12 @@ namespace ThreatScanner
                 _totalCaptured++;
                 UpdateCounter();
                 ApplyRowFilterVisibility(row, entry);
+
+                // The route handler may have already parked this request
+                // before this event fired — re-apply the held visuals now
+                // that the row actually exists.
+                if (_pendingIntercepts.ContainsKey(id))
+                    MarkRowHeld(id, request.Method, request.ResourceType, request.Url);
             });
         }
 
@@ -381,35 +393,49 @@ namespace ThreatScanner
                 Log("[Intercept] Now intercepting: " + string.Join(", ", _interceptedTypes), Color.Cyan);
         }
 
-        // Add a row to the intercept queue listview
-        private void AddToInterceptQueue(string id, string method, string type, string url)
+        // Mark the row for `id` as held (creates a placeholder entry/row if
+        // the route handler raced ahead of the Request event).
+        private void MarkRowHeld(string id, string method, string type, string url)
         {
-            var item = new ListViewItem(method);
-            item.SubItems.Add(type);
-            item.SubItems.Add(url);
-            item.Tag = id;
-            item.ForeColor = Color.FromArgb(234, 88, 12);
-            listView_InterceptQueue.Items.Add(item);
-            UpdateInterceptQueueUI();
+            if (!_entriesById.TryGetValue(id, out var entry) || entry.GridRow == null)
+            {
+                // Row doesn't exist yet — OnRequest will call us again once
+                // it does (it checks _pendingIntercepts after creating it).
+                UpdateInterceptQueueUI();
+                return;
+            }
+
+            entry.IsHeld = true;
+            var row = entry.GridRow;
+            row.Cells["col_Status"].Value = "⏸ Held";
+            row.DefaultCellStyle.ForeColor = Color.FromArgb(234, 88, 12);
             Log($"[Intercept] ⏸ {method} [{type}] {url}", Color.FromArgb(234, 179, 8));
+            UpdateInterceptQueueUI();
         }
 
-        private void RemoveFromInterceptQueue(string id)
+        // Clears the held marker once Forward/Drop resolves the route.
+        private void ClearRowHeld(string id, bool dropped)
         {
-            foreach (ListViewItem item in listView_InterceptQueue.Items)
+            if (_entriesById.TryGetValue(id, out var entry))
             {
-                if (item.Tag as string == id)
+                entry.IsHeld = false;
+                if (dropped && entry.GridRow != null)
                 {
-                    listView_InterceptQueue.Items.Remove(item);
-                    break;
+                    entry.Error = "Dropped by user";
+                    var row = entry.GridRow;
+                    row.Cells["col_Status"].Value = "🚫 Dropped";
+                    row.DefaultCellStyle.ForeColor = Color.Firebrick;
+                    ApplyRowFilterVisibility(row, entry);
                 }
+                // If forwarded, leave the status cell as "…" — OnResponse
+                // will fill in the real status shortly.
             }
             UpdateInterceptQueueUI();
         }
 
         private void UpdateInterceptQueueUI()
         {
-            int count = listView_InterceptQueue.Items.Count;
+            int count = _pendingIntercepts.Count;
             label_InterceptQueueCount.Text = count == 0
                 ? "No requests held"
                 : $"{count} request{(count == 1 ? "" : "s")} held";
@@ -417,47 +443,48 @@ namespace ThreatScanner
                 ? Color.FromArgb(234, 88, 12)
                 : Color.FromArgb(100, 116, 139);
 
-            bool hasSelected = listView_InterceptQueue.SelectedItems.Count > 0;
-            btn_Intercept_Forward.Enabled = hasSelected;
-            btn_Intercept_Drop.Enabled = hasSelected;
+            bool hasHeldSelection = dataGridView_Requests.SelectedRows.Count > 0 &&
+                dataGridView_Requests.SelectedRows.Cast<DataGridViewRow>()
+                    .Any(r => (r.Tag as ProxyEntry)?.IsHeld == true);
+
+            btn_Intercept_Forward.Enabled = hasHeldSelection;
+            btn_Intercept_Drop.Enabled = hasHeldSelection;
             btn_Intercept_ForwardAll.Enabled = count > 0;
             btn_Intercept_DropAll.Enabled = count > 0;
         }
 
-        private void listView_InterceptQueue_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            UpdateInterceptQueueUI();
-        }
-
-        // Forward selected
+        // Forward selected (any selected grid row that's currently held)
         private void Btn_Intercept_Forward_Click(object sender, EventArgs e)
         {
-            foreach (ListViewItem item in listView_InterceptQueue.SelectedItems)
-                ResolveIntercept(item.Tag as string, forward: true);
+            foreach (var entry in SelectedHeldEntries())
+                ResolveIntercept(entry.RequestId, forward: true);
         }
 
         // Drop selected
         private void Btn_Intercept_Drop_Click(object sender, EventArgs e)
         {
-            foreach (ListViewItem item in listView_InterceptQueue.SelectedItems)
-                ResolveIntercept(item.Tag as string, forward: false);
+            foreach (var entry in SelectedHeldEntries())
+                ResolveIntercept(entry.RequestId, forward: false);
         }
 
-        // Forward all
+        // Forward all currently-held requests, selected or not
         private void Btn_Intercept_ForwardAll_Click(object sender, EventArgs e)
         {
-            var ids = listView_InterceptQueue.Items.Cast<ListViewItem>()
-                      .Select(i => i.Tag as string).ToList();
-            foreach (var id in ids) ResolveIntercept(id, forward: true);
+            foreach (var id in _pendingIntercepts.Keys.ToList())
+                ResolveIntercept(id, forward: true);
         }
 
-        // Drop all
+        // Drop all currently-held requests, selected or not
         private void Btn_Intercept_DropAll_Click(object sender, EventArgs e)
         {
-            var ids = listView_InterceptQueue.Items.Cast<ListViewItem>()
-                      .Select(i => i.Tag as string).ToList();
-            foreach (var id in ids) ResolveIntercept(id, forward: false);
+            foreach (var id in _pendingIntercepts.Keys.ToList())
+                ResolveIntercept(id, forward: false);
         }
+
+        private IEnumerable<ProxyEntry> SelectedHeldEntries() =>
+            dataGridView_Requests.SelectedRows.Cast<DataGridViewRow>()
+                .Select(r => r.Tag as ProxyEntry)
+                .Where(entry => entry != null && entry.IsHeld);
 
         private void ResolveIntercept(string id, bool forward)
         {
@@ -468,16 +495,19 @@ namespace ThreatScanner
                 Log(forward ? $"[Intercept] ▶ Forwarded" : $"[Intercept] ✖ Dropped",
                     forward ? Color.LimeGreen : Color.OrangeRed);
             }
-            RemoveFromInterceptQueue(id);
         }
 
         // ── DETAIL PANE ───────────────────────────────────────────────────────
 
         private void dataGridView_Requests_SelectionChanged(object sender, EventArgs e)
         {
-            if (dataGridView_Requests.SelectedRows.Count == 0) { ShowDetail(null); return; }
-            var entry = dataGridView_Requests.SelectedRows[0].Tag as ProxyEntry;
-            ShowDetail(entry);
+            if (dataGridView_Requests.SelectedRows.Count == 0) { ShowDetail(null); }
+            else
+            {
+                var entry = dataGridView_Requests.SelectedRows[0].Tag as ProxyEntry;
+                ShowDetail(entry);
+            }
+            UpdateInterceptQueueUI();
         }
 
         private void ShowDetail(ProxyEntry entry)
