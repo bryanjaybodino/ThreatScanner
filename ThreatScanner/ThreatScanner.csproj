@@ -111,6 +111,12 @@
     <Compile Include="CsrfTesterForm.Designer.cs">
       <DependentUpon>CsrfTesterForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="FileUploadSecurityForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FileUploadSecurityForm.Designer.cs">
+      <DependentUpon>FileUploadSecurityForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="FullScannerForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -169,6 +175,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="CsrfTesterForm.resx">
       <DependentUpon>CsrfTesterForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FileUploadSecurityForm.resx">
+      <DependentUpon>FileUploadSecurityForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="FullScannerForm.resx">
       <DependentUpon>FullScannerForm.cs</DependentUpon>

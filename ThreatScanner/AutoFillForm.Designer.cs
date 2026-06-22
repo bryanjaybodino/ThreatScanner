@@ -246,6 +246,8 @@
             // checkBox_DryRun
             // 
             this.checkBox_DryRun.AutoSize = true;
+            this.checkBox_DryRun.Checked = true;
+            this.checkBox_DryRun.CheckState = System.Windows.Forms.CheckState.Checked;
             this.checkBox_DryRun.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.checkBox_DryRun.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
             this.checkBox_DryRun.Location = new System.Drawing.Point(232, 30);

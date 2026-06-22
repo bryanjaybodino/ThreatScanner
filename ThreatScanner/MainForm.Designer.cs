@@ -36,6 +36,8 @@
             this.label_SqlInjectionDesc = new System.Windows.Forms.Label();
             this.button_OpenHttpProxyLog = new System.Windows.Forms.Button();
             this.label_HttpProxyLogDesc = new System.Windows.Forms.Label();
+            this.button_OpenFileUploadSecurity = new System.Windows.Forms.Button();
+            this.label_FileUploadSecurityDesc = new System.Windows.Forms.Label();
             this.label_Disclaimer = new System.Windows.Forms.Label();
             this.panel_TopBar.SuspendLayout();
             this.panel_Cards.SuspendLayout();
@@ -95,6 +97,8 @@
             this.panel_Cards.Controls.Add(this.label_SqlInjectionDesc);
             this.panel_Cards.Controls.Add(this.button_OpenHttpProxyLog);
             this.panel_Cards.Controls.Add(this.label_HttpProxyLogDesc);
+            this.panel_Cards.Controls.Add(this.button_OpenFileUploadSecurity);
+            this.panel_Cards.Controls.Add(this.label_FileUploadSecurityDesc);
             this.panel_Cards.Controls.Add(this.label_Disclaimer);
             this.panel_Cards.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_Cards.Location = new System.Drawing.Point(0, 80);
@@ -338,7 +342,7 @@
             // button_OpenHttpProxyLog
             //
             this.button_OpenHttpProxyLog.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.button_OpenHttpProxyLog.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.button_OpenHttpProxyLog.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(79)))), ((int)(((byte)(70)))), ((int)(((byte)(229)))));
             this.button_OpenHttpProxyLog.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_OpenHttpProxyLog.FlatAppearance.BorderSize = 0;
             this.button_OpenHttpProxyLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
@@ -363,6 +367,35 @@
             this.label_HttpProxyLogDesc.TabIndex = 18;
             this.label_HttpProxyLogDesc.Text = "Logs every request/response made\nby your browser tab, live";
             this.label_HttpProxyLogDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // button_OpenFileUploadSecurity
+            //
+            this.button_OpenFileUploadSecurity.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.button_OpenFileUploadSecurity.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(13)))), ((int)(((byte)(148)))), ((int)(((byte)(136)))));
+            this.button_OpenFileUploadSecurity.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button_OpenFileUploadSecurity.FlatAppearance.BorderSize = 0;
+            this.button_OpenFileUploadSecurity.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_OpenFileUploadSecurity.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this.button_OpenFileUploadSecurity.ForeColor = System.Drawing.Color.White;
+            this.button_OpenFileUploadSecurity.Location = new System.Drawing.Point(390, 420);
+            this.button_OpenFileUploadSecurity.Name = "button_OpenFileUploadSecurity";
+            this.button_OpenFileUploadSecurity.Size = new System.Drawing.Size(330, 100);
+            this.button_OpenFileUploadSecurity.TabIndex = 19;
+            this.button_OpenFileUploadSecurity.Text = "📁  File Upload Security";
+            this.button_OpenFileUploadSecurity.UseVisualStyleBackColor = false;
+            this.button_OpenFileUploadSecurity.Click += new System.EventHandler(this.button_OpenFileUploadSecurity_Click);
+            //
+            // label_FileUploadSecurityDesc
+            //
+            this.label_FileUploadSecurityDesc.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.label_FileUploadSecurityDesc.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.label_FileUploadSecurityDesc.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(71)))), ((int)(((byte)(85)))), ((int)(((byte)(105)))));
+            this.label_FileUploadSecurityDesc.Location = new System.Drawing.Point(390, 530);
+            this.label_FileUploadSecurityDesc.Name = "label_FileUploadSecurityDesc";
+            this.label_FileUploadSecurityDesc.Size = new System.Drawing.Size(330, 50);
+            this.label_FileUploadSecurityDesc.TabIndex = 20;
+            this.label_FileUploadSecurityDesc.Text = "Tests extension/MIME/magic-byte bypasses\nagainst a file upload endpoint";
+            this.label_FileUploadSecurityDesc.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             //
             // label_Disclaimer
             //
@@ -420,6 +453,8 @@
         private System.Windows.Forms.Label label_SqlInjectionDesc;
         private System.Windows.Forms.Button button_OpenHttpProxyLog;
         private System.Windows.Forms.Label label_HttpProxyLogDesc;
+        private System.Windows.Forms.Button button_OpenFileUploadSecurity;
+        private System.Windows.Forms.Label label_FileUploadSecurityDesc;
         private System.Windows.Forms.Label label_Disclaimer;
     }
 }

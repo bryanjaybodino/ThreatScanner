@@ -31,10 +31,21 @@
             this.label1 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.panel_Intercept = new System.Windows.Forms.Panel();
+            this.label_InterceptQueueTitle = new System.Windows.Forms.Label();
+            this.label_InterceptQueueCount = new System.Windows.Forms.Label();
+            this.btn_Intercept_Forward = new System.Windows.Forms.Button();
+            this.btn_Intercept_Drop = new System.Windows.Forms.Button();
+            this.btn_Intercept_ForwardAll = new System.Windows.Forms.Button();
+            this.btn_Intercept_DropAll = new System.Windows.Forms.Button();
+            this.label_CorrelationCaption = new System.Windows.Forms.Label();
             this.label_InterceptTitle = new System.Windows.Forms.Label();
+            this.label_CorrelationValue = new System.Windows.Forms.Label();
             this.label_InterceptHint = new System.Windows.Forms.Label();
+            this.button_Replay = new System.Windows.Forms.Button();
             this.label_InterceptStatus = new System.Windows.Forms.Label();
+            this.button_CopyCurl = new System.Windows.Forms.Button();
             this.chk_Intercept_XHR = new System.Windows.Forms.CheckBox();
+            this.button_CopyHttpClient = new System.Windows.Forms.Button();
             this.chk_Intercept_Fetch = new System.Windows.Forms.CheckBox();
             this.chk_Intercept_Document = new System.Windows.Forms.CheckBox();
             this.chk_Intercept_Script = new System.Windows.Forms.CheckBox();
@@ -44,6 +55,14 @@
             this.chk_Intercept_Other = new System.Windows.Forms.CheckBox();
             this.panel_Grid = new System.Windows.Forms.Panel();
             this.splitContainer_Main = new System.Windows.Forms.SplitContainer();
+            this.dataGridView_Requests = new System.Windows.Forms.DataGridView();
+            this.col_Time = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Method = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Status = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Type = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Size = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Correlation = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.col_Url = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.panel_Detail = new System.Windows.Forms.Panel();
             this.tabControl_Detail = new System.Windows.Forms.TabControl();
             this.tabPage_Headers = new System.Windows.Forms.TabPage();
@@ -60,29 +79,10 @@
             this.tabPage_RespBody = new System.Windows.Forms.TabPage();
             this.tabPage_Timing = new System.Windows.Forms.TabPage();
             this.textBox_Timing = new System.Windows.Forms.TextBox();
-            this.label_CorrelationCaption = new System.Windows.Forms.Label();
-            this.label_CorrelationValue = new System.Windows.Forms.Label();
-            this.button_Replay = new System.Windows.Forms.Button();
-            this.button_CopyCurl = new System.Windows.Forms.Button();
-            this.button_CopyHttpClient = new System.Windows.Forms.Button();
+            this.panel_DetailToolbar = new System.Windows.Forms.Panel();
             this.panel_Output = new System.Windows.Forms.Panel();
             this.richTextBox_Output = new System.Windows.Forms.RichTextBox();
             this.label_Output = new System.Windows.Forms.Label();
-            this.panel_DetailToolbar = new System.Windows.Forms.Panel();
-            this.col_Url = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Correlation = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Size = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Type = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Status = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Method = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.col_Time = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.dataGridView_Requests = new System.Windows.Forms.DataGridView();
-            this.label_InterceptQueueTitle = new System.Windows.Forms.Label();
-            this.label_InterceptQueueCount = new System.Windows.Forms.Label();
-            this.btn_Intercept_Forward = new System.Windows.Forms.Button();
-            this.btn_Intercept_Drop = new System.Windows.Forms.Button();
-            this.btn_Intercept_ForwardAll = new System.Windows.Forms.Button();
-            this.btn_Intercept_DropAll = new System.Windows.Forms.Button();
             this.panel_TopBar.SuspendLayout();
             this.panel_RequestBar.SuspendLayout();
             this.panel_Intercept.SuspendLayout();
@@ -91,6 +91,7 @@
             this.splitContainer_Main.Panel1.SuspendLayout();
             this.splitContainer_Main.Panel2.SuspendLayout();
             this.splitContainer_Main.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Requests)).BeginInit();
             this.panel_Detail.SuspendLayout();
             this.tabControl_Detail.SuspendLayout();
             this.tabPage_Headers.SuspendLayout();
@@ -100,7 +101,6 @@
             this.splitContainer_Headers.SuspendLayout();
             this.tabPage_Timing.SuspendLayout();
             this.panel_Output.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Requests)).BeginInit();
             this.SuspendLayout();
             // 
             // panel_TopBar
@@ -120,7 +120,7 @@
             // 
             this.label_AppTitle.AutoSize = true;
             this.label_AppTitle.Font = new System.Drawing.Font("Segoe UI", 14F, System.Drawing.FontStyle.Bold);
-            this.label_AppTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.label_AppTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(79)))), ((int)(((byte)(70)))), ((int)(((byte)(229)))));
             this.label_AppTitle.Location = new System.Drawing.Point(16, 12);
             this.label_AppTitle.Name = "label_AppTitle";
             this.label_AppTitle.Size = new System.Drawing.Size(245, 32);
@@ -214,7 +214,7 @@
             // 
             // button_StartCapture
             // 
-            this.button_StartCapture.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.button_StartCapture.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(79)))), ((int)(((byte)(70)))), ((int)(((byte)(229)))));
             this.button_StartCapture.Cursor = System.Windows.Forms.Cursors.Hand;
             this.button_StartCapture.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button_StartCapture.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
@@ -351,6 +351,114 @@
             this.panel_Intercept.Size = new System.Drawing.Size(1380, 130);
             this.panel_Intercept.TabIndex = 2;
             // 
+            // label_InterceptQueueTitle
+            // 
+            this.label_InterceptQueueTitle.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label_InterceptQueueTitle.AutoSize = true;
+            this.label_InterceptQueueTitle.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.label_InterceptQueueTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(53)))), ((int)(((byte)(15)))));
+            this.label_InterceptQueueTitle.Location = new System.Drawing.Point(714, 8);
+            this.label_InterceptQueueTitle.Name = "label_InterceptQueueTitle";
+            this.label_InterceptQueueTitle.Size = new System.Drawing.Size(109, 20);
+            this.label_InterceptQueueTitle.TabIndex = 11;
+            this.label_InterceptQueueTitle.Text = "Held Requests";
+            // 
+            // label_InterceptQueueCount
+            // 
+            this.label_InterceptQueueCount.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label_InterceptQueueCount.AutoSize = true;
+            this.label_InterceptQueueCount.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.label_InterceptQueueCount.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
+            this.label_InterceptQueueCount.Location = new System.Drawing.Point(818, 9);
+            this.label_InterceptQueueCount.Name = "label_InterceptQueueCount";
+            this.label_InterceptQueueCount.Size = new System.Drawing.Size(113, 19);
+            this.label_InterceptQueueCount.TabIndex = 12;
+            this.label_InterceptQueueCount.Text = "No requests held";
+            // 
+            // btn_Intercept_Forward
+            // 
+            this.btn_Intercept_Forward.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btn_Intercept_Forward.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(22)))), ((int)(((byte)(163)))), ((int)(((byte)(74)))));
+            this.btn_Intercept_Forward.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btn_Intercept_Forward.Enabled = false;
+            this.btn_Intercept_Forward.FlatAppearance.BorderSize = 0;
+            this.btn_Intercept_Forward.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btn_Intercept_Forward.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.btn_Intercept_Forward.ForeColor = System.Drawing.Color.White;
+            this.btn_Intercept_Forward.Location = new System.Drawing.Point(714, 32);
+            this.btn_Intercept_Forward.Name = "btn_Intercept_Forward";
+            this.btn_Intercept_Forward.Size = new System.Drawing.Size(168, 26);
+            this.btn_Intercept_Forward.TabIndex = 13;
+            this.btn_Intercept_Forward.Text = "▶ Forward selected";
+            this.btn_Intercept_Forward.UseVisualStyleBackColor = false;
+            this.btn_Intercept_Forward.Click += new System.EventHandler(this.Btn_Intercept_Forward_Click);
+            // 
+            // btn_Intercept_Drop
+            // 
+            this.btn_Intercept_Drop.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btn_Intercept_Drop.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(38)))), ((int)(((byte)(38)))));
+            this.btn_Intercept_Drop.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btn_Intercept_Drop.Enabled = false;
+            this.btn_Intercept_Drop.FlatAppearance.BorderSize = 0;
+            this.btn_Intercept_Drop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btn_Intercept_Drop.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.btn_Intercept_Drop.ForeColor = System.Drawing.Color.White;
+            this.btn_Intercept_Drop.Location = new System.Drawing.Point(890, 32);
+            this.btn_Intercept_Drop.Name = "btn_Intercept_Drop";
+            this.btn_Intercept_Drop.Size = new System.Drawing.Size(168, 26);
+            this.btn_Intercept_Drop.TabIndex = 14;
+            this.btn_Intercept_Drop.Text = "✖ Drop selected";
+            this.btn_Intercept_Drop.UseVisualStyleBackColor = false;
+            this.btn_Intercept_Drop.Click += new System.EventHandler(this.Btn_Intercept_Drop_Click);
+            // 
+            // btn_Intercept_ForwardAll
+            // 
+            this.btn_Intercept_ForwardAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btn_Intercept_ForwardAll.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(118)))), ((int)(((byte)(110)))));
+            this.btn_Intercept_ForwardAll.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btn_Intercept_ForwardAll.Enabled = false;
+            this.btn_Intercept_ForwardAll.FlatAppearance.BorderSize = 0;
+            this.btn_Intercept_ForwardAll.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btn_Intercept_ForwardAll.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.btn_Intercept_ForwardAll.ForeColor = System.Drawing.Color.White;
+            this.btn_Intercept_ForwardAll.Location = new System.Drawing.Point(1066, 32);
+            this.btn_Intercept_ForwardAll.Name = "btn_Intercept_ForwardAll";
+            this.btn_Intercept_ForwardAll.Size = new System.Drawing.Size(168, 26);
+            this.btn_Intercept_ForwardAll.TabIndex = 15;
+            this.btn_Intercept_ForwardAll.Text = "▶▶ Forward All";
+            this.btn_Intercept_ForwardAll.UseVisualStyleBackColor = false;
+            this.btn_Intercept_ForwardAll.Click += new System.EventHandler(this.Btn_Intercept_ForwardAll_Click);
+            // 
+            // btn_Intercept_DropAll
+            // 
+            this.btn_Intercept_DropAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btn_Intercept_DropAll.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(153)))), ((int)(((byte)(27)))), ((int)(((byte)(27)))));
+            this.btn_Intercept_DropAll.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btn_Intercept_DropAll.Enabled = false;
+            this.btn_Intercept_DropAll.FlatAppearance.BorderSize = 0;
+            this.btn_Intercept_DropAll.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btn_Intercept_DropAll.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.btn_Intercept_DropAll.ForeColor = System.Drawing.Color.White;
+            this.btn_Intercept_DropAll.Location = new System.Drawing.Point(1242, 32);
+            this.btn_Intercept_DropAll.Name = "btn_Intercept_DropAll";
+            this.btn_Intercept_DropAll.Size = new System.Drawing.Size(118, 24);
+            this.btn_Intercept_DropAll.TabIndex = 16;
+            this.btn_Intercept_DropAll.Text = "✖✖ Drop All";
+            this.btn_Intercept_DropAll.UseVisualStyleBackColor = false;
+            this.btn_Intercept_DropAll.Click += new System.EventHandler(this.Btn_Intercept_DropAll_Click);
+            // 
+            // label_CorrelationCaption
+            // 
+            this.label_CorrelationCaption.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label_CorrelationCaption.AutoSize = true;
+            this.label_CorrelationCaption.Font = new System.Drawing.Font("Segoe UI", 8.5F);
+            this.label_CorrelationCaption.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
+            this.label_CorrelationCaption.Location = new System.Drawing.Point(714, 87);
+            this.label_CorrelationCaption.Name = "label_CorrelationCaption";
+            this.label_CorrelationCaption.Size = new System.Drawing.Size(105, 20);
+            this.label_CorrelationCaption.TabIndex = 0;
+            this.label_CorrelationCaption.Text = "Correlation ID:";
+            // 
             // label_InterceptTitle
             // 
             this.label_InterceptTitle.AutoSize = true;
@@ -361,6 +469,18 @@
             this.label_InterceptTitle.Size = new System.Drawing.Size(117, 23);
             this.label_InterceptTitle.TabIndex = 0;
             this.label_InterceptTitle.Text = "⏸  Intercept";
+            // 
+            // label_CorrelationValue
+            // 
+            this.label_CorrelationValue.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.label_CorrelationValue.AutoSize = true;
+            this.label_CorrelationValue.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.label_CorrelationValue.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
+            this.label_CorrelationValue.Location = new System.Drawing.Point(831, 87);
+            this.label_CorrelationValue.Name = "label_CorrelationValue";
+            this.label_CorrelationValue.Size = new System.Drawing.Size(24, 20);
+            this.label_CorrelationValue.TabIndex = 1;
+            this.label_CorrelationValue.Text = "—";
             // 
             // label_InterceptHint
             // 
@@ -373,6 +493,21 @@
             this.label_InterceptHint.TabIndex = 1;
             this.label_InterceptHint.Text = "Check resource types to pause matching requests before they are sent";
             // 
+            // button_Replay
+            // 
+            this.button_Replay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.button_Replay.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(79)))), ((int)(((byte)(70)))), ((int)(((byte)(229)))));
+            this.button_Replay.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_Replay.Font = new System.Drawing.Font("Segoe UI", 8.5F);
+            this.button_Replay.ForeColor = System.Drawing.Color.White;
+            this.button_Replay.Location = new System.Drawing.Point(1060, 87);
+            this.button_Replay.Name = "button_Replay";
+            this.button_Replay.Size = new System.Drawing.Size(80, 26);
+            this.button_Replay.TabIndex = 2;
+            this.button_Replay.Text = "▶ Replay";
+            this.button_Replay.UseVisualStyleBackColor = false;
+            this.button_Replay.Click += new System.EventHandler(this.button_Replay_Click);
+            // 
             // label_InterceptStatus
             // 
             this.label_InterceptStatus.AutoSize = true;
@@ -384,6 +519,18 @@
             this.label_InterceptStatus.TabIndex = 2;
             this.label_InterceptStatus.Text = "Interception off";
             // 
+            // button_CopyCurl
+            // 
+            this.button_CopyCurl.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.button_CopyCurl.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_CopyCurl.Font = new System.Drawing.Font("Segoe UI", 8.5F);
+            this.button_CopyCurl.Location = new System.Drawing.Point(1150, 87);
+            this.button_CopyCurl.Name = "button_CopyCurl";
+            this.button_CopyCurl.Size = new System.Drawing.Size(90, 26);
+            this.button_CopyCurl.TabIndex = 3;
+            this.button_CopyCurl.Text = "📋 cURL";
+            this.button_CopyCurl.Click += new System.EventHandler(this.button_CopyCurl_Click);
+            // 
             // chk_Intercept_XHR
             // 
             this.chk_Intercept_XHR.AutoSize = true;
@@ -394,6 +541,18 @@
             this.chk_Intercept_XHR.Size = new System.Drawing.Size(60, 24);
             this.chk_Intercept_XHR.TabIndex = 3;
             this.chk_Intercept_XHR.Text = "XHR";
+            // 
+            // button_CopyHttpClient
+            // 
+            this.button_CopyHttpClient.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.button_CopyHttpClient.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_CopyHttpClient.Font = new System.Drawing.Font("Segoe UI", 8.5F);
+            this.button_CopyHttpClient.Location = new System.Drawing.Point(1250, 87);
+            this.button_CopyHttpClient.Name = "button_CopyHttpClient";
+            this.button_CopyHttpClient.Size = new System.Drawing.Size(110, 26);
+            this.button_CopyHttpClient.TabIndex = 4;
+            this.button_CopyHttpClient.Text = "📋 HttpClient";
+            this.button_CopyHttpClient.Click += new System.EventHandler(this.button_CopyHttpClient_Click);
             // 
             // chk_Intercept_Fetch
             // 
@@ -498,6 +657,88 @@
             this.splitContainer_Main.Size = new System.Drawing.Size(1380, 518);
             this.splitContainer_Main.SplitterDistance = 250;
             this.splitContainer_Main.TabIndex = 0;
+            // 
+            // dataGridView_Requests
+            // 
+            this.dataGridView_Requests.AllowUserToAddRows = false;
+            this.dataGridView_Requests.AllowUserToDeleteRows = false;
+            this.dataGridView_Requests.BackgroundColor = System.Drawing.Color.White;
+            this.dataGridView_Requests.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.dataGridView_Requests.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dataGridView_Requests.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.col_Time,
+            this.col_Method,
+            this.col_Status,
+            this.col_Type,
+            this.col_Size,
+            this.col_Correlation,
+            this.col_Url});
+            this.dataGridView_Requests.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dataGridView_Requests.Location = new System.Drawing.Point(0, 0);
+            this.dataGridView_Requests.Name = "dataGridView_Requests";
+            this.dataGridView_Requests.ReadOnly = true;
+            this.dataGridView_Requests.RowHeadersVisible = false;
+            this.dataGridView_Requests.RowHeadersWidth = 51;
+            this.dataGridView_Requests.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dataGridView_Requests.Size = new System.Drawing.Size(1380, 250);
+            this.dataGridView_Requests.TabIndex = 0;
+            this.dataGridView_Requests.SelectionChanged += new System.EventHandler(this.dataGridView_Requests_SelectionChanged);
+            // 
+            // col_Time
+            // 
+            this.col_Time.HeaderText = "Time";
+            this.col_Time.MinimumWidth = 6;
+            this.col_Time.Name = "col_Time";
+            this.col_Time.ReadOnly = true;
+            this.col_Time.Width = 90;
+            // 
+            // col_Method
+            // 
+            this.col_Method.HeaderText = "Method";
+            this.col_Method.MinimumWidth = 6;
+            this.col_Method.Name = "col_Method";
+            this.col_Method.ReadOnly = true;
+            this.col_Method.Width = 70;
+            // 
+            // col_Status
+            // 
+            this.col_Status.HeaderText = "Status";
+            this.col_Status.MinimumWidth = 6;
+            this.col_Status.Name = "col_Status";
+            this.col_Status.ReadOnly = true;
+            this.col_Status.Width = 60;
+            // 
+            // col_Type
+            // 
+            this.col_Type.HeaderText = "Type";
+            this.col_Type.MinimumWidth = 6;
+            this.col_Type.Name = "col_Type";
+            this.col_Type.ReadOnly = true;
+            this.col_Type.Width = 80;
+            // 
+            // col_Size
+            // 
+            this.col_Size.HeaderText = "Size";
+            this.col_Size.MinimumWidth = 6;
+            this.col_Size.Name = "col_Size";
+            this.col_Size.ReadOnly = true;
+            this.col_Size.Width = 70;
+            // 
+            // col_Correlation
+            // 
+            this.col_Correlation.HeaderText = "Correlation";
+            this.col_Correlation.MinimumWidth = 6;
+            this.col_Correlation.Name = "col_Correlation";
+            this.col_Correlation.ReadOnly = true;
+            this.col_Correlation.Width = 130;
+            // 
+            // col_Url
+            // 
+            this.col_Url.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
+            this.col_Url.HeaderText = "URL";
+            this.col_Url.MinimumWidth = 6;
+            this.col_Url.Name = "col_Url";
+            this.col_Url.ReadOnly = true;
             // 
             // panel_Detail
             // 
@@ -626,7 +867,7 @@
             // 
             this.tabPage_ReqBody.Location = new System.Drawing.Point(4, 25);
             this.tabPage_ReqBody.Name = "tabPage_ReqBody";
-            this.tabPage_ReqBody.Size = new System.Drawing.Size(1372, 78);
+            this.tabPage_ReqBody.Size = new System.Drawing.Size(1372, 230);
             this.tabPage_ReqBody.TabIndex = 1;
             this.tabPage_ReqBody.Text = "Request Body";
             // 
@@ -634,7 +875,7 @@
             // 
             this.tabPage_RespBody.Location = new System.Drawing.Point(4, 25);
             this.tabPage_RespBody.Name = "tabPage_RespBody";
-            this.tabPage_RespBody.Size = new System.Drawing.Size(1372, 78);
+            this.tabPage_RespBody.Size = new System.Drawing.Size(1372, 230);
             this.tabPage_RespBody.TabIndex = 2;
             this.tabPage_RespBody.Text = "Response Body";
             // 
@@ -643,7 +884,7 @@
             this.tabPage_Timing.Controls.Add(this.textBox_Timing);
             this.tabPage_Timing.Location = new System.Drawing.Point(4, 25);
             this.tabPage_Timing.Name = "tabPage_Timing";
-            this.tabPage_Timing.Size = new System.Drawing.Size(1372, 78);
+            this.tabPage_Timing.Size = new System.Drawing.Size(1372, 230);
             this.tabPage_Timing.TabIndex = 3;
             this.tabPage_Timing.Text = "Timing";
             // 
@@ -657,71 +898,17 @@
             this.textBox_Timing.Name = "textBox_Timing";
             this.textBox_Timing.ReadOnly = true;
             this.textBox_Timing.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.textBox_Timing.Size = new System.Drawing.Size(1372, 78);
+            this.textBox_Timing.Size = new System.Drawing.Size(1372, 230);
             this.textBox_Timing.TabIndex = 0;
             // 
-            // label_CorrelationCaption
+            // panel_DetailToolbar
             // 
-            this.label_CorrelationCaption.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.label_CorrelationCaption.AutoSize = true;
-            this.label_CorrelationCaption.Font = new System.Drawing.Font("Segoe UI", 8.5F);
-            this.label_CorrelationCaption.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
-            this.label_CorrelationCaption.Location = new System.Drawing.Point(714, 87);
-            this.label_CorrelationCaption.Name = "label_CorrelationCaption";
-            this.label_CorrelationCaption.Size = new System.Drawing.Size(105, 20);
-            this.label_CorrelationCaption.TabIndex = 0;
-            this.label_CorrelationCaption.Text = "Correlation ID:";
-            // 
-            // label_CorrelationValue
-            // 
-            this.label_CorrelationValue.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.label_CorrelationValue.AutoSize = true;
-            this.label_CorrelationValue.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
-            this.label_CorrelationValue.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
-            this.label_CorrelationValue.Location = new System.Drawing.Point(831, 87);
-            this.label_CorrelationValue.Name = "label_CorrelationValue";
-            this.label_CorrelationValue.Size = new System.Drawing.Size(24, 20);
-            this.label_CorrelationValue.TabIndex = 1;
-            this.label_CorrelationValue.Text = "—";
-            // 
-            // button_Replay
-            // 
-            this.button_Replay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.button_Replay.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(145)))), ((int)(((byte)(178)))));
-            this.button_Replay.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_Replay.Font = new System.Drawing.Font("Segoe UI", 8.5F);
-            this.button_Replay.ForeColor = System.Drawing.Color.White;
-            this.button_Replay.Location = new System.Drawing.Point(1060, 87);
-            this.button_Replay.Name = "button_Replay";
-            this.button_Replay.Size = new System.Drawing.Size(80, 26);
-            this.button_Replay.TabIndex = 2;
-            this.button_Replay.Text = "▶ Replay";
-            this.button_Replay.UseVisualStyleBackColor = false;
-            this.button_Replay.Click += new System.EventHandler(this.button_Replay_Click);
-            // 
-            // button_CopyCurl
-            // 
-            this.button_CopyCurl.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.button_CopyCurl.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_CopyCurl.Font = new System.Drawing.Font("Segoe UI", 8.5F);
-            this.button_CopyCurl.Location = new System.Drawing.Point(1150, 87);
-            this.button_CopyCurl.Name = "button_CopyCurl";
-            this.button_CopyCurl.Size = new System.Drawing.Size(90, 26);
-            this.button_CopyCurl.TabIndex = 3;
-            this.button_CopyCurl.Text = "📋 cURL";
-            this.button_CopyCurl.Click += new System.EventHandler(this.button_CopyCurl_Click);
-            // 
-            // button_CopyHttpClient
-            // 
-            this.button_CopyHttpClient.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.button_CopyHttpClient.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_CopyHttpClient.Font = new System.Drawing.Font("Segoe UI", 8.5F);
-            this.button_CopyHttpClient.Location = new System.Drawing.Point(1250, 87);
-            this.button_CopyHttpClient.Name = "button_CopyHttpClient";
-            this.button_CopyHttpClient.Size = new System.Drawing.Size(110, 26);
-            this.button_CopyHttpClient.TabIndex = 4;
-            this.button_CopyHttpClient.Text = "📋 HttpClient";
-            this.button_CopyHttpClient.Click += new System.EventHandler(this.button_CopyHttpClient_Click);
+            this.panel_DetailToolbar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(224)))), ((int)(((byte)(224)))), ((int)(((byte)(224)))));
+            this.panel_DetailToolbar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panel_DetailToolbar.Location = new System.Drawing.Point(0, 0);
+            this.panel_DetailToolbar.Name = "panel_DetailToolbar";
+            this.panel_DetailToolbar.Size = new System.Drawing.Size(1380, 5);
+            this.panel_DetailToolbar.TabIndex = 0;
             // 
             // panel_Output
             // 
@@ -760,193 +947,6 @@
             this.label_Output.TabIndex = 0;
             this.label_Output.Text = "LOG";
             // 
-            // panel_DetailToolbar
-            // 
-            this.panel_DetailToolbar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(224)))), ((int)(((byte)(224)))), ((int)(((byte)(224)))));
-            this.panel_DetailToolbar.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panel_DetailToolbar.Location = new System.Drawing.Point(0, 0);
-            this.panel_DetailToolbar.Name = "panel_DetailToolbar";
-            this.panel_DetailToolbar.Size = new System.Drawing.Size(1380, 5);
-            this.panel_DetailToolbar.TabIndex = 0;
-            // 
-            // col_Url
-            // 
-            this.col_Url.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
-            this.col_Url.HeaderText = "URL";
-            this.col_Url.MinimumWidth = 6;
-            this.col_Url.Name = "col_Url";
-            this.col_Url.ReadOnly = true;
-            // 
-            // col_Correlation
-            // 
-            this.col_Correlation.HeaderText = "Correlation";
-            this.col_Correlation.MinimumWidth = 6;
-            this.col_Correlation.Name = "col_Correlation";
-            this.col_Correlation.ReadOnly = true;
-            this.col_Correlation.Width = 130;
-            // 
-            // col_Size
-            // 
-            this.col_Size.HeaderText = "Size";
-            this.col_Size.MinimumWidth = 6;
-            this.col_Size.Name = "col_Size";
-            this.col_Size.ReadOnly = true;
-            this.col_Size.Width = 70;
-            // 
-            // col_Type
-            // 
-            this.col_Type.HeaderText = "Type";
-            this.col_Type.MinimumWidth = 6;
-            this.col_Type.Name = "col_Type";
-            this.col_Type.ReadOnly = true;
-            this.col_Type.Width = 80;
-            // 
-            // col_Status
-            // 
-            this.col_Status.HeaderText = "Status";
-            this.col_Status.MinimumWidth = 6;
-            this.col_Status.Name = "col_Status";
-            this.col_Status.ReadOnly = true;
-            this.col_Status.Width = 60;
-            // 
-            // col_Method
-            // 
-            this.col_Method.HeaderText = "Method";
-            this.col_Method.MinimumWidth = 6;
-            this.col_Method.Name = "col_Method";
-            this.col_Method.ReadOnly = true;
-            this.col_Method.Width = 70;
-            // 
-            // col_Time
-            // 
-            this.col_Time.HeaderText = "Time";
-            this.col_Time.MinimumWidth = 6;
-            this.col_Time.Name = "col_Time";
-            this.col_Time.ReadOnly = true;
-            this.col_Time.Width = 90;
-            // 
-            // dataGridView_Requests
-            // 
-            this.dataGridView_Requests.AllowUserToAddRows = false;
-            this.dataGridView_Requests.AllowUserToDeleteRows = false;
-            this.dataGridView_Requests.BackgroundColor = System.Drawing.Color.White;
-            this.dataGridView_Requests.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.dataGridView_Requests.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dataGridView_Requests.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
-            this.col_Time,
-            this.col_Method,
-            this.col_Status,
-            this.col_Type,
-            this.col_Size,
-            this.col_Correlation,
-            this.col_Url});
-            this.dataGridView_Requests.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.dataGridView_Requests.Location = new System.Drawing.Point(0, 0);
-            this.dataGridView_Requests.Name = "dataGridView_Requests";
-            this.dataGridView_Requests.ReadOnly = true;
-            this.dataGridView_Requests.RowHeadersVisible = false;
-            this.dataGridView_Requests.RowHeadersWidth = 51;
-            this.dataGridView_Requests.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dataGridView_Requests.Size = new System.Drawing.Size(1380, 250);
-            this.dataGridView_Requests.TabIndex = 0;
-            this.dataGridView_Requests.SelectionChanged += new System.EventHandler(this.dataGridView_Requests_SelectionChanged);
-            // 
-            // label_InterceptQueueTitle
-            // 
-            this.label_InterceptQueueTitle.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.label_InterceptQueueTitle.AutoSize = true;
-            this.label_InterceptQueueTitle.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
-            this.label_InterceptQueueTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(53)))), ((int)(((byte)(15)))));
-            this.label_InterceptQueueTitle.Location = new System.Drawing.Point(714, 8);
-            this.label_InterceptQueueTitle.Name = "label_InterceptQueueTitle";
-            this.label_InterceptQueueTitle.Size = new System.Drawing.Size(109, 20);
-            this.label_InterceptQueueTitle.TabIndex = 11;
-            this.label_InterceptQueueTitle.Text = "Held Requests";
-            // 
-            // label_InterceptQueueCount
-            // 
-            this.label_InterceptQueueCount.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.label_InterceptQueueCount.AutoSize = true;
-            this.label_InterceptQueueCount.Font = new System.Drawing.Font("Segoe UI", 8F);
-            this.label_InterceptQueueCount.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
-            this.label_InterceptQueueCount.Location = new System.Drawing.Point(818, 9);
-            this.label_InterceptQueueCount.Name = "label_InterceptQueueCount";
-            this.label_InterceptQueueCount.Size = new System.Drawing.Size(113, 19);
-            this.label_InterceptQueueCount.TabIndex = 12;
-            this.label_InterceptQueueCount.Text = "No requests held";
-            // 
-            // btn_Intercept_Forward
-            // 
-            this.btn_Intercept_Forward.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btn_Intercept_Forward.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(22)))), ((int)(((byte)(163)))), ((int)(((byte)(74)))));
-            this.btn_Intercept_Forward.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btn_Intercept_Forward.Enabled = false;
-            this.btn_Intercept_Forward.FlatAppearance.BorderSize = 0;
-            this.btn_Intercept_Forward.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btn_Intercept_Forward.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
-            this.btn_Intercept_Forward.ForeColor = System.Drawing.Color.White;
-            this.btn_Intercept_Forward.Location = new System.Drawing.Point(714, 32);
-            this.btn_Intercept_Forward.Name = "btn_Intercept_Forward";
-            this.btn_Intercept_Forward.Size = new System.Drawing.Size(168, 26);
-            this.btn_Intercept_Forward.TabIndex = 13;
-            this.btn_Intercept_Forward.Text = "▶ Forward selected";
-            this.btn_Intercept_Forward.UseVisualStyleBackColor = false;
-            this.btn_Intercept_Forward.Click += new System.EventHandler(this.Btn_Intercept_Forward_Click);
-            // 
-            // btn_Intercept_Drop
-            // 
-            this.btn_Intercept_Drop.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btn_Intercept_Drop.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(38)))), ((int)(((byte)(38)))));
-            this.btn_Intercept_Drop.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btn_Intercept_Drop.Enabled = false;
-            this.btn_Intercept_Drop.FlatAppearance.BorderSize = 0;
-            this.btn_Intercept_Drop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btn_Intercept_Drop.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
-            this.btn_Intercept_Drop.ForeColor = System.Drawing.Color.White;
-            this.btn_Intercept_Drop.Location = new System.Drawing.Point(890, 32);
-            this.btn_Intercept_Drop.Name = "btn_Intercept_Drop";
-            this.btn_Intercept_Drop.Size = new System.Drawing.Size(168, 26);
-            this.btn_Intercept_Drop.TabIndex = 14;
-            this.btn_Intercept_Drop.Text = "✖ Drop selected";
-            this.btn_Intercept_Drop.UseVisualStyleBackColor = false;
-            this.btn_Intercept_Drop.Click += new System.EventHandler(this.Btn_Intercept_Drop_Click);
-            // 
-            // btn_Intercept_ForwardAll
-            // 
-            this.btn_Intercept_ForwardAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btn_Intercept_ForwardAll.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(118)))), ((int)(((byte)(110)))));
-            this.btn_Intercept_ForwardAll.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btn_Intercept_ForwardAll.Enabled = false;
-            this.btn_Intercept_ForwardAll.FlatAppearance.BorderSize = 0;
-            this.btn_Intercept_ForwardAll.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btn_Intercept_ForwardAll.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
-            this.btn_Intercept_ForwardAll.ForeColor = System.Drawing.Color.White;
-            this.btn_Intercept_ForwardAll.Location = new System.Drawing.Point(1066, 32);
-            this.btn_Intercept_ForwardAll.Name = "btn_Intercept_ForwardAll";
-            this.btn_Intercept_ForwardAll.Size = new System.Drawing.Size(168, 26);
-            this.btn_Intercept_ForwardAll.TabIndex = 15;
-            this.btn_Intercept_ForwardAll.Text = "▶▶ Forward All";
-            this.btn_Intercept_ForwardAll.UseVisualStyleBackColor = false;
-            this.btn_Intercept_ForwardAll.Click += new System.EventHandler(this.Btn_Intercept_ForwardAll_Click);
-            // 
-            // btn_Intercept_DropAll
-            // 
-            this.btn_Intercept_DropAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btn_Intercept_DropAll.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(153)))), ((int)(((byte)(27)))), ((int)(((byte)(27)))));
-            this.btn_Intercept_DropAll.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btn_Intercept_DropAll.Enabled = false;
-            this.btn_Intercept_DropAll.FlatAppearance.BorderSize = 0;
-            this.btn_Intercept_DropAll.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btn_Intercept_DropAll.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
-            this.btn_Intercept_DropAll.ForeColor = System.Drawing.Color.White;
-            this.btn_Intercept_DropAll.Location = new System.Drawing.Point(1242, 32);
-            this.btn_Intercept_DropAll.Name = "btn_Intercept_DropAll";
-            this.btn_Intercept_DropAll.Size = new System.Drawing.Size(118, 24);
-            this.btn_Intercept_DropAll.TabIndex = 16;
-            this.btn_Intercept_DropAll.Text = "✖✖ Drop All";
-            this.btn_Intercept_DropAll.UseVisualStyleBackColor = false;
-            this.btn_Intercept_DropAll.Click += new System.EventHandler(this.Btn_Intercept_DropAll_Click);
-            // 
             // HttpProxyLogForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
@@ -974,6 +974,7 @@
             this.splitContainer_Main.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer_Main)).EndInit();
             this.splitContainer_Main.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Requests)).EndInit();
             this.panel_Detail.ResumeLayout(false);
             this.tabControl_Detail.ResumeLayout(false);
             this.tabPage_Headers.ResumeLayout(false);
@@ -984,7 +985,6 @@
             this.tabPage_Timing.ResumeLayout(false);
             this.tabPage_Timing.PerformLayout();
             this.panel_Output.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_Requests)).EndInit();
             this.ResumeLayout(false);
 
         }

@@ -141,5 +141,10 @@ namespace ThreatScanner
         {
             OpenOrFocus(() => new HttpProxyLogForm());
         }
+
+        private void button_OpenFileUploadSecurity_Click(object sender, EventArgs e)
+        {
+            OpenOrFocus(() => new FileUploadSecurityForm());
+        }
     }
 }
