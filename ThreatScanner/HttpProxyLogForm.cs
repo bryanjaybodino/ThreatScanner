@@ -20,8 +20,11 @@ namespace ThreatScanner
         // ── CDP / Playwright state ──────────────────────────────────────────────
         private CdpHelper _cdp;
         private IBrowserContext _context;
-        private IPage _interceptPage;          // page we attach RouteAsync to
+        private IPage _interceptPage;          // kept only for legacy reference, no longer used for routing
         private bool _capturing = false;
+
+        // Track every page we've explicitly wired up, so we don't double-subscribe
+        private readonly HashSet<IPage> _trackedPages = new HashSet<IPage>();
 
         private readonly ConcurrentDictionary<string, ProxyEntry> _entriesById =
             new ConcurrentDictionary<string, ProxyEntry>();
@@ -41,17 +44,12 @@ namespace ThreatScanner
         private readonly System.Windows.Forms.Timer _filterDebounce =
             new System.Windows.Forms.Timer { Interval = 200 };
 
-        // ── INTERCEPT state ────────────────────────────────────────────────────
-        // Pending intercepts: requestId → TaskCompletionSource that the route
-        // handler blocks on.  Resolving it with true = forward, false = drop.
         private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingIntercepts =
             new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
 
-        // The actual IRoute for each pending request (needed to call ContinueAsync / AbortAsync)
         private readonly ConcurrentDictionary<string, IRoute> _pendingRoutes =
             new ConcurrentDictionary<string, IRoute>();
 
-        // Which resource types are being intercepted (driven by the checkboxes)
         private readonly HashSet<string> _interceptedTypes =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -80,7 +78,6 @@ namespace ThreatScanner
                 ReapplyAllRowFilters();
             };
 
-            // Wire intercept checkboxes
             chk_Intercept_XHR.CheckedChanged += OnInterceptCheckChanged;
             chk_Intercept_Fetch.CheckedChanged += OnInterceptCheckChanged;
             chk_Intercept_Document.CheckedChanged += OnInterceptCheckChanged;
@@ -90,7 +87,6 @@ namespace ThreatScanner
             chk_Intercept_CSS.CheckedChanged += OnInterceptCheckChanged;
             chk_Intercept_Other.CheckedChanged += OnInterceptCheckChanged;
 
-            // Wire intercept queue buttons
             btn_Intercept_Forward.Click += Btn_Intercept_Forward_Click;
             btn_Intercept_Drop.Click += Btn_Intercept_Drop_Click;
             btn_Intercept_ForwardAll.Click += Btn_Intercept_ForwardAll_Click;
@@ -116,12 +112,13 @@ namespace ThreatScanner
                 _context = page.Context;
                 _interceptPage = page;
 
-                _context.Request += OnRequest;
-                _context.Response += OnResponse;
-                _context.RequestFailed += OnRequestFailed;
+                // Fires whenever Playwright attaches to a NEW page (new tab,
+                // window.open, ctrl+click, etc.) within this context.
+                _context.Page += Context_OnNewPage;
 
-                // Register a catch-all route; we decide per-request whether to intercept
-                await page.RouteAsync("**/*", HandleRouteAsync);
+                // Wire up every page that already exists right now.
+                foreach (IPage existing in _context.Pages)
+                    await AttachPageAsync(existing);
 
                 Log("[Proxy] Capturing started. Browse normally — every request the browser makes will be logged here.", Color.LimeGreen);
                 if (_interceptedTypes.Count > 0)
@@ -134,16 +131,53 @@ namespace ThreatScanner
             }
         }
 
+        // Called once per new tab/page Playwright discovers in this context.
+        private async void Context_OnNewPage(object sender, IPage newPage)
+        {
+            Log("[CDP] New tab detected: " + (string.IsNullOrEmpty(newPage.Url) ? "(blank)" : newPage.Url), Color.Cyan);
+            try { await AttachPageAsync(newPage); }
+            catch (Exception ex) { Log("[CDP] Failed to attach new tab: " + ex.Message, Color.OrangeRed); }
+        }
+
+        // Subscribes request/response events AND installs the route handler
+        // on a single page. Called for every existing tab at start, and every
+        // new tab that opens afterward.
+        private async Task AttachPageAsync(IPage page)
+        {
+            if (page == null || page.IsClosed) return;
+            lock (_trackedPages)
+            {
+                if (_trackedPages.Contains(page)) return;
+                _trackedPages.Add(page);
+            }
+
+            page.Request += OnRequest;
+            page.Response += OnResponse;
+            page.RequestFailed += OnRequestFailed;
+            page.Close += (_, __) =>
+            {
+                lock (_trackedPages) _trackedPages.Remove(page);
+            };
+
+            try
+            {
+                await page.RouteAsync("**/*", HandleRouteAsync);
+            }
+            catch (Exception ex)
+            {
+                Log("[CDP] RouteAsync failed for tab: " + ex.Message, Color.OrangeRed);
+            }
+        }
+
         private void button_StopCapture_Click(object sender, EventArgs e) => StopCapture();
 
         private void StopCapture()
         {
             if (!_capturing) return;
 
-            // Release all pending intercepts so their handler threads don't leak
             foreach (var kv in _pendingIntercepts)
             {
-                kv.Value.TrySetResult(true);   // forward anything still held
+                kv.Value.TrySetResult(true);
                 var id = kv.Key;
                 if (_entriesById.TryGetValue(id, out var entry)) entry.IsHeld = false;
             }
@@ -153,26 +187,35 @@ namespace ThreatScanner
 
             if (_context != null)
             {
+                try { _context.Page -= Context_OnNewPage; }
+                catch { }
+            }
+
+            List<IPage> pagesToDetach;
+            lock (_trackedPages)
+            {
+                pagesToDetach = new List<IPage>(_trackedPages);
+                _trackedPages.Clear();
+            }
+
+            foreach (var p in pagesToDetach)
+            {
                 try
                 {
-                    _context.Request -= OnRequest;
-                    _context.Response -= OnResponse;
-                    _context.RequestFailed -= OnRequestFailed;
+                    p.Request -= OnRequest;
+                    p.Response -= OnResponse;
+                    p.RequestFailed -= OnRequestFailed;
+                    if (!p.IsClosed) _ = p.UnrouteAllAsync();
                 }
                 catch { }
             }
 
-            if (_interceptPage != null)
-            {
-                try { _ = _interceptPage.UnrouteAllAsync(); } catch { }
-                _interceptPage = null;
-            }
+            _interceptPage = null;
 
             SetCapturing(false);
             Log("[Proxy] Capturing stopped.", Color.Orange);
             RunOnUi(UpdateInterceptQueueUI);
         }
-
         private void HttpProxyLogForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             StopCapture();

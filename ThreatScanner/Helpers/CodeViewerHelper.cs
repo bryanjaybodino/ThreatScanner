@@ -139,7 +139,7 @@ namespace ThreatScanner.Helpers
                 ForeColor = Color.FromArgb(200, 200, 200),
                 BackColor = BtnBg,
                 Cursor = Cursors.Hand,
-                Size = new Size(90, 24),
+                Size = new Size(90, 30),
                 Margin = new Padding(2, 0, 2, 0),
             };
 
