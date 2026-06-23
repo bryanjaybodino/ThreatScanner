@@ -28,7 +28,6 @@
             this.button_Stop = new System.Windows.Forms.Button();
             this.progressBar = new System.Windows.Forms.ProgressBar();
             this.button_AutoDetect = new System.Windows.Forms.Button();
-            this.button_VerifySubmit = new System.Windows.Forms.Button();
             this.label_DetectStatus = new System.Windows.Forms.Label();
             this.panel_Tests = new System.Windows.Forms.Panel();
             this.label_TestsTitle = new System.Windows.Forms.Label();
@@ -149,7 +148,6 @@
             this.panel_RequestBar.Controls.Add(this.button_Stop);
             this.panel_RequestBar.Controls.Add(this.progressBar);
             this.panel_RequestBar.Controls.Add(this.button_AutoDetect);
-            this.panel_RequestBar.Controls.Add(this.button_VerifySubmit);
             this.panel_RequestBar.Controls.Add(this.label_DetectStatus);
             this.panel_RequestBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panel_RequestBar.Location = new System.Drawing.Point(0, 64);
@@ -253,28 +251,12 @@
             this.button_AutoDetect.UseVisualStyleBackColor = false;
             this.button_AutoDetect.Click += new System.EventHandler(this.button_AutoDetect_Click);
             // 
-            // button_VerifySubmit
-            // 
-            this.button_VerifySubmit.BackColor = System.Drawing.Color.White;
-            this.button_VerifySubmit.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.button_VerifySubmit.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(13)))), ((int)(((byte)(148)))), ((int)(((byte)(136)))));
-            this.button_VerifySubmit.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_VerifySubmit.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.button_VerifySubmit.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(13)))), ((int)(((byte)(148)))), ((int)(((byte)(136)))));
-            this.button_VerifySubmit.Location = new System.Drawing.Point(244, 68);
-            this.button_VerifySubmit.Name = "button_VerifySubmit";
-            this.button_VerifySubmit.Size = new System.Drawing.Size(230, 30);
-            this.button_VerifySubmit.TabIndex = 8;
-            this.button_VerifySubmit.Text = "🧪  Verify Submission";
-            this.button_VerifySubmit.UseVisualStyleBackColor = false;
-            this.button_VerifySubmit.Click += new System.EventHandler(this.button_VerifySubmit_Click);
-            // 
             // label_DetectStatus
             // 
             this.label_DetectStatus.AutoSize = true;
             this.label_DetectStatus.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Italic);
             this.label_DetectStatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(116)))), ((int)(((byte)(139)))));
-            this.label_DetectStatus.Location = new System.Drawing.Point(484, 75);
+            this.label_DetectStatus.Location = new System.Drawing.Point(242, 78);
             this.label_DetectStatus.Name = "label_DetectStatus";
             this.label_DetectStatus.Size = new System.Drawing.Size(452, 20);
             this.label_DetectStatus.TabIndex = 9;
@@ -711,7 +693,6 @@
         private System.Windows.Forms.Button button_Stop;
         private System.Windows.Forms.ProgressBar progressBar;
         private System.Windows.Forms.Button button_AutoDetect;
-        private System.Windows.Forms.Button button_VerifySubmit;
         private System.Windows.Forms.Label label_DetectStatus;
         private System.Windows.Forms.Panel panel_Tests;
         private System.Windows.Forms.Label label_TestsTitle;
