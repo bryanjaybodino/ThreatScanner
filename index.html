@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThreatScanner — Web Vulnerability Testing Toolkit</title>
+    <!-- Tailwind CSS -->
+    <script src="./assets/tailwindcss.js"></script>
+    <!-- FontAwesome Icons -->
+    <link href="./assets/font-awesome.min.css" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link href="./assets/fonts.googleapis.css?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            500: '#e11d48',
+                            600: '#e11d48',
+                            700: '#be123c',
+                            800: '#9f1239',
+                            900: '#881337',
+                        },
+                        cyber: {
+                            dark: '#0f172a',
+                            card: '#1e293b',
+                            border: '#334155',
+                            accent: '#f43f5e'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glow-effect {
+            box-shadow: 0 0 25px -5px rgba(225, 29, 72, 0.25);
+        }
+
+        .dark .glow-effect {
+            box-shadow: 0 0 35px -5px rgba(244, 63, 94, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col selection:bg-rose-600 selection:text-white">
+
+    <!-- Navigation Bar -->
+    <header class="sticky top-0 z-40 w-full backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <a href="#" class="flex items-center space-x-3 group">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-red-600 flex items-center justify-center text-white shadow-md shadow-rose-600/20 group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-bolt text-lg"></i>
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-bold text-lg tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                        ThreatScanner
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">v2.5</span>
+                    </span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">Security & Penetration Testing Toolkit</span>
+                </div>
+            </a>
+
+            <!-- Desktop Nav Links -->
+            <nav class="hidden md:flex items-center space-x-8 text-sm font-medium">
+                <a href="#overview" class="text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition-colors">Overview</a>
+                <a href="#preview" class="text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition-colors">Main Interface</a>
+                <a href="#modules" class="text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition-colors">Modules (10)</a>
+                <a href="#download" class="text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition-colors">Downloads</a>
+                <a href="#disclaimer" class="text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition-colors">Compliance</a>
+            </nav>
+
+            <!-- Actions Right -->
+            <div class="flex items-center space-x-3">
+                <!-- Theme Toggle Button -->
+                <button id="themeToggleBtn" onclick="toggleTheme()" aria-label="Toggle Theme" class="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
+                    <i id="themeIcon" class="fa-solid fa-moon"></i>
+                </button>
+
+                <!-- Action CTA -->
+                <a href="#download" class="hidden sm:inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-600 dark:hover:bg-rose-500 rounded-lg shadow-sm shadow-rose-600/30 transition-all hover:scale-[1.02]">
+                    Get Software
+                </a>
+
+                <!-- Mobile Menu Button -->
+                <button id="mobileMenuBtn" aria-label="Toggle Mobile Menu" class="md:hidden p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i class="fa-solid fa-bars text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Menu Container -->
+        <div id="mobileMenu" class="hidden md:hidden border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-2 pb-4 space-y-2">
+            <a href="#overview" class="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400">Overview</a>
+            <a href="#preview" class="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400">Main Interface</a>
+            <a href="#modules" class="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400">Modules (10)</a>
+            <a href="#download" class="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400">Downloads</a>
+            <a href="#disclaimer" class="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400">Compliance</a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="overview" class="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24 border-b border-slate-200 dark:border-slate-800/60">
+        <!-- Background decoration -->
+        <div class="absolute inset-0 -z-10 opacity-30 dark:opacity-20 pointer-events-none">
+            <div class="absolute top-10 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-gradient-to-r from-rose-500 to-red-600 blur-[120px] rounded-full"></div>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800/80 mb-6">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Authorized Penetration Testing Platform
+            </div>
+
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl mx-auto leading-tight">
+                All-in-One <span class="bg-gradient-to-r from-rose-500 via-red-500 to-amber-600 bg-clip-text text-transparent">Web Vulnerability</span> & Penetration Toolkit
+            </h1>
+
+            <p class="mt-6 text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto font-normal">
+                High-performance, non-blocking C# WinForms application equipped with 10 powerful modules for comprehensive security audits, proxy logs, and API fuzzing.
+            </p>
+
+            <div class="mt-8 flex flex-wrap justify-center gap-4">
+                <a href="#preview" class="px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold shadow-lg shadow-rose-600/20 flex items-center gap-2 transition-all hover:-translate-y-0.5">
+                    <i class="fa-solid fa-desktop"></i>
+                    View App Main Form
+                </a>
+                <a href="#modules" class="px-6 py-3 rounded-xl bg-rose-950/30 dark:bg-rose-950/50 border border-rose-300/40 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group"></i>
+                    Browse 10 Modules
+                </a>
+            </div>
+
+            <!-- Key Feature Badges -->
+            <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
+                <div class="flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    <i class="fa-solid fa-bolt text-rose-500"></i> Non-Blocking UI
+                </div>
+                <div class="flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    <i class="fa-solid fa-window-restore text-rose-500"></i> Singleton Window Handling
+                </div>
+                <div class="flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    <i class="fa-solid fa-network-wired text-rose-500"></i> Live Proxy Interception
+                </div>
+                <div class="flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    <i class="fa-solid fa-shield-halved text-rose-500"></i> Remediation Guidance
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- App Preview Section (Main Form Display) -->
+    <section id="preview" class="py-16 bg-rose-950/10 dark:bg-slate-900/50 border-b border-rose-900/20 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Main Form Interface</h2>
+                <p class="mt-2 text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+                    Central launcher interface (<code class="text-rose-500">MainForm.cs</code>) providing instant access to all 10 security scanning suites.
+                </p>
+            </div>
+
+            <!-- Screenshot Container -->
+            <div class="relative max-w-5xl mx-auto rounded-2xl overflow-hidden border border-rose-800/60 dark:border-slate-800 bg-rose-950/80 dark:bg-slate-900 shadow-2xl glow-effect">
+                <!-- Window Header Bar -->
+                <div class="bg-rose-950 dark:bg-slate-900 border-b border-rose-800/60 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                        <span class="ml-3 text-xs font-mono text-rose-200 dark:text-slate-400">ThreatScanner — Select Tool (MainForm.cs)</span>
+                    </div>
+                    <div class="flex items-center space-x-3 text-xs text-rose-300 dark:text-slate-500">
+                        <span><i class="fa-solid fa-microchip"></i> WinForms</span>
+                        <span><i class="fa-solid fa-code-branch"></i> C# .NET</span>
+                    </div>
+                </div>
+
+                <!-- Main Form Image Display Container -->
+                <div class="relative min-h-[380px] sm:min-h-[480px] bg-slate-950 flex items-center justify-center p-2 sm:p-4">
+                    <img src="./assets/screenshot.jpg"
+                         alt="ThreatScanner Main Form Screenshot"
+                         class="w-full h-auto max-h-[700px] object-contain rounded-lg shadow-md"
+                         onerror="this.style.display='none'; document.getElementById('screenshotFallback').classList.remove('hidden');" />
+
+                    <!-- Fallback if screenshot image is not present -->
+                    <div id="screenshotFallback" class="hidden w-full py-12 px-6 flex flex-col items-center justify-center text-center">
+                        <div class="w-20 h-20 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+                            <i class="fa-solid fa-image text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">MainForm Launcher Screenshot</h3>
+                        <p class="text-slate-400 text-sm max-w-md mb-6">
+                            Place your screenshot at <code class="bg-slate-800 px-2 py-1 rounded text-rose-300 text-xs font-mono">./assets/screenshot.jpg</code> to display your live application interface here.
+                        </p>
+                        <!-- Interactive Form Preview Box -->
+                        <div class="w-full max-w-3xl bg-rose-950/80 rounded-xl border border-rose-800/80 p-4 text-left shadow-xl">
+                            <div class="bg-rose-900/50 text-white p-3 rounded-lg border-b border-rose-700/60 mb-4 flex justify-between items-center">
+                                <div>
+                                    <h4 class="font-bold text-lg flex items-center gap-2"><span class="text-rose-400">⚡</span> ThreatScanner</h4>
+                                    <p class="text-xs text-rose-200/80">Web Vulnerability Testing Toolkit • For authorized testing only</p>
+                                </div>
+                                <span class="text-xs font-mono bg-rose-950 text-rose-300 px-2.5 py-1 rounded border border-rose-800">10 Tools Active</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">🔍 Full Scanner</p>
+                                </div>
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">🔐 Brute Force</p>
+                                </div>
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">🛰️ API Tester</p>
+                                </div>
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">🟠 WebSocket</p>
+                                </div>
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">🛡️ CSRF Tester</p>
+                                </div>
+                                <div class="bg-rose-600/20 border border-rose-500/30 p-3 rounded-lg text-center">
+                                    <p class="font-bold text-rose-300 text-sm">📝 Auto Fill</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Explore ThreatScanner Modules Section -->
+    <section id="modules" class="py-16 sm:py-24">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row md:items-end justify-between mb-12">
+                <div>
+                    <span class="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Toolkit Architecture</span>
+                    <h2 class="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">Explore ThreatScanner Modules</h2>
+                    <p class="text-slate-600 dark:text-slate-400 mt-2 max-w-xl">
+                        Comprehensive security testing suite featuring 10 specialized, non-blocking tools defined in <code class="font-mono text-xs bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-800">MainForm.cs</code>.
+                    </p>
+                </div>
+                <div class="mt-4 md:mt-0">
+                    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold">
+                        <i class="fa-solid fa-layer-group text-rose-500"></i>
+                        10 Integrated Security Tools
+                    </span>
+                </div>
+            </div>
+
+            <!-- 10 Modules Grid - Crimson/Red Themed Content Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                <!-- 1. Full Scanner -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-magnifying-glass font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🔍 Full Scanner
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        HTTPS, security headers, cookies, SQL injection hints, XSS, open ports, and DNS record evaluation in a single unified scan.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">FullScannerForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Comprehensive Audit</span>
+                    </div>
+                </div>
+
+                <!-- 2. Brute Force -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-lock font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🔐 Brute Force
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Auto-detect ASP.NET, PHP, or standard HTML forms and execute high-speed wordlist dictionary attacks.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">BruteForceForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Authentication Audit</span>
+                    </div>
+                </div>
+
+                <!-- 3. API Tester -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-satellite-dish font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🛰️ API Tester
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Postman-style HTTP API tester supporting custom authentication, HTTP headers, URL parameters, and request body payloads.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">ApiTesterForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">REST & HTTP Testing</span>
+                    </div>
+                </div>
+
+                <!-- 4. WebSocket Tester -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-network-wired font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🟠 WebSocket Tester
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Connect, transmit WS frames, receive real-time streaming data, and fuzz payloads over <code class="text-xs font-mono">ws://</code> and <code class="text-xs font-mono">wss://</code> protocols.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">WebSocketForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Realtime Socket Protocol</span>
+                    </div>
+                </div>
+
+                <!-- 5. CSRF Tester -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-shield-virus font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🛡️ CSRF Tester
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Detect missing anti-CSRF tokens, SameSite cookie misconfigurations, loose CORS policies, and forge cross-site HTTP requests.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">CsrfTesterForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Cross-Site Vulnerability</span>
+                    </div>
+                </div>
+
+                <!-- 6. Auto Fill -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-pen-to-square font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        📝 Auto Fill
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Automatically populate complex multi-input web forms with custom or pre-configured test data sets for rapid input testing.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">AutoFillForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Form Automation</span>
+                    </div>
+                </div>
+
+                <!-- 7. Subdomain Scanner -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-globe font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🌐 Subdomain Scanner
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Discover hidden subdomains via Certificate Transparency logs (crt.sh, CertSpotter) and probe each target live.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">SubdomainScannerForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Reconnaissance</span>
+                    </div>
+                </div>
+
+                <!-- 8. SQL Injection -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-database font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🛡️ SQL Injection
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Passive and active database error-disclosure checker equipped with step-by-step remediation guidance.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">SqlInjectionForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Database Security</span>
+                    </div>
+                </div>
+
+                <!-- 9. HTTP Proxy Log -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-arrow-right-arrow-left font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        🌐 HTTP Proxy Log
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Intercept and log every HTTP request/response made by your application or browser tab live in real-time.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">HttpProxyLogForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Traffic Monitoring</span>
+                    </div>
+                </div>
+
+                <!-- 10. File Upload Security -->
+                <div class="group relative bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-800/60 p-6 shadow-sm hover:shadow-xl hover:border-rose-500 dark:hover:border-rose-400 transition-all duration-300 hover:-translate-y-1 md:col-span-2 lg:col-span-1">
+                    <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-file-shield font-bold"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        📁 File Upload Security
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Audit file upload endpoints against extension bypasses, MIME-type spoofing, and magic-byte header bypasses.
+                    </p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/60 dark:border-rose-800/60 flex items-center justify-between text-xs font-mono">
+                        <span class="text-slate-500 dark:text-slate-400">FileUploadSecurityForm.cs</span>
+                        <span class="text-rose-600 dark:text-rose-400 font-semibold">Payload Validation</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Downloads & GitHub Repository Section -->
+    <section id="download" class="py-20 border-t border-slate-200 dark:border-slate-800/80 bg-rose-950/5 dark:bg-slate-900/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-12">
+                <span class="text-xs font-mono font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Get The Software</span>
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-1">Downloads & Source Code</h2>
+                <p class="text-slate-600 dark:text-slate-400 text-sm mt-2">Download the Windows compiled application release or explore the source repository.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                <!-- Card 1: Windows Application Binary Download -->
+                <div class="bg-white dark:bg-slate-900 border border-rose-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between hover:border-rose-500/50 transition-all">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="px-2.5 py-1 rounded text-[10px] font-mono bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold uppercase border border-rose-200 dark:border-rose-800">WINDOWS BINARY (.EXE / .ZIP)</span>
+                            <span class="text-xs font-mono text-slate-500 dark:text-slate-400">v2.5 Release</span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mt-3 flex items-center gap-2">
+                            <i class="fa-brands fa-windows text-rose-600 dark:text-rose-400"></i> ThreatScanner Desktop Build
+                        </h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Standalone C# Windows Forms application compiled binary ready for execution.</p>
+
+                        <div class="mt-4 space-y-1 text-xs font-mono text-slate-600 dark:text-slate-400">
+                            <p><i class="fa-solid fa-angle-right text-rose-500 mr-1"></i> Supports Windows 10 / 11 (.NET Framework / .NET Core)</p>
+                            <p><i class="fa-solid fa-angle-right text-rose-500 mr-1"></i> Standalone executable with zero external installations required</p>
+                        </div>
+                    </div>
+
+                    <a href="https://www.mediafire.com/file/6twruxm4wevm4rz/ThreatScanner.zip/file" class="mt-6 w-full py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs uppercase rounded-xl transition-all text-center block shadow-lg shadow-rose-600/20 hover:scale-[1.01]">
+                        <i class="fa-solid fa-download mr-1"></i> Download ThreatScanner (.zip)
+                    </a>
+                </div>
+
+                <!-- Card 2: GitHub Repository -->
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between hover:border-rose-500/50 transition-all">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="px-2.5 py-1 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold uppercase border border-slate-200 dark:border-slate-700">OPEN SOURCE</span>
+                            <span class="text-xs font-mono text-slate-500 dark:text-slate-400">GitHub</span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mt-3 flex items-center gap-2">
+                            <i class="fa-brands fa-github text-slate-900 dark:text-white"></i> GitHub Source Code
+                        </h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Access full C# WinForms solution files, inspect form modules, or contribute improvements.</p>
+
+                        <div class="mt-4 space-y-1 text-xs font-mono text-slate-600 dark:text-slate-400">
+                            <p><i class="fa-solid fa-angle-right text-rose-500 mr-1"></i> Full Visual Studio C# Solution (.sln)</p>
+                            <p><i class="fa-solid fa-angle-right text-rose-500 mr-1"></i> Open Source / MIT License</p>
+                        </div>
+                    </div>
+
+                    <a href="https://github.com/bryanjaybodino/ThreatScanner" target="_blank" class="mt-6 w-full py-3 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs uppercase rounded-xl transition-all text-center block border border-slate-800 dark:border-slate-700">
+                        <i class="fa-brands fa-github mr-1"></i> View Source on GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Compliance & Disclaimer Section -->
+    <section id="disclaimer" class="py-12 border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <div class="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 dark:bg-rose-950/30 dark:border-rose-800/50">
+                <div class="flex justify-center mb-3 text-rose-600 dark:text-rose-400 text-2xl">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Authorized Testing & Legal Disclaimer</h3>
+                <p class="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                    ThreatScanner is strictly intended for legal penetration testing, vulnerability assessments, and educational security research on systems you own or have explicit authorization to test. Unauthorized scanning or attacking against targets is strictly prohibited and illegal.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-auto py-8 bg-white dark:bg-slate-950 text-slate-500 text-xs text-center border-t border-slate-200 dark:border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-2">
+                <span class="font-bold text-slate-800 dark:text-slate-200">ThreatScanner</span>
+                <span>• Web Vulnerability & Penetration Testing Suite</span>
+            </div>
+            <div>
+                &copy; ThreatScanner Toolkit. Designed for Security Researchers.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Fixed Messenger Button (m.me/bodino.a.bryanjay) -->
+    <a href="https://m.me/bodino.a.bryanjay"
+       target="_blank"
+       rel="noopener noreferrer"
+       aria-label="Contact on Messenger"
+       class="fixed bottom-6 right-6 z-50 p-3.5 rounded-full bg-gradient-to-tr from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-xl shadow-rose-600/30 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group">
+        <i class="fa-brands fa-facebook-messenger text-2xl"></i> <span style="padding:5px"></span>Chat Now
+        <!-- Tooltip on Hover -->
+        <span class="absolute right-full mr-3 bg-slate-900 dark:bg-slate-800 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-md pointer-events-none">
+            Chat on Messenger
+        </span>
+    </a>
+
+    <!-- JavaScript Navigation & Theme Switcher -->
+    <script>
+        // Check initial theme preference
+        const userTheme = localStorage.getItem('theme');
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+        function applyTheme(isDark) {
+            const icon = document.getElementById('themeIcon');
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+                if (icon) icon.className = 'fa-solid fa-sun text-amber-400';
+            } else {
+                document.documentElement.classList.remove('dark');
+                if (icon) icon.className = 'fa-solid fa-moon text-slate-600';
+            }
+        }
+
+        // Initialize Theme
+        if (userTheme === 'dark' || (!userTheme && systemTheme)) {
+            applyTheme(true);
+        } else {
+            applyTheme(false);
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const newTheme = !isDark;
+            applyTheme(newTheme);
+            localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+        }
+
+        // Mobile Menu Toggle Fix
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', function () {
+                mobileMenu.classList.toggle('hidden');
+            });
+        }
+    </script>
+</body>
+</html>
